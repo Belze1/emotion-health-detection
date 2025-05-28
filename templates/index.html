@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Health Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body data-video-recommendations="{{ 'enabled' if video_recommendations_enabled else 'disabled' }}">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Emotion Health Detection</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/history">History</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% if not video_recommendations_enabled %}
+        <div class="alert alert-warning" role="alert">
+            <strong>Note:</strong> Video recommendations are currently disabled. To enable them, please add a valid YouTube API key to your .env file.
+        </div>
+        {% endif %}
+
+        <div class="video-chart-container">
+            <!-- Video Feed -->
+            <div class="video-section">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Live Feed</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="video-container">
+                            <img id="videoFeed" src="{{ url_for('video_feed') }}" class="img-fluid" alt="Video Feed">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Emotion Chart -->
+            <div class="chart-section">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Real-time Emotion Analysis</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="emotionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if video_recommendations_enabled %}
+        <div class="row mt-4" id="recommendationsSection" style="display: none;">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            Video Recommendations
+                            <span class="badge bg-warning text-dark" id="riskBadge"></span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="recommendationsList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Initialize Socket.IO
+        const socket = io({
+            transports: ['websocket'],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000
+        });
+
+        // Handle video stream
+        const videoFeed = document.getElementById('videoFeed');
+        let videoStream = null;
+        let reconnectTimer = null;
+
+        function initVideoStream() {
+            videoFeed.src = "{{ url_for('video_feed') }}";
+            videoFeed.onerror = handleVideoError;
+        }
+
+        function handleVideoError() {
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+            }
+            reconnectTimer = setTimeout(() => {
+                console.log('Attempting to reconnect video stream...');
+                initVideoStream();
+            }, 2000);
+        }
+
+        // Initialize video stream
+        initVideoStream();
+
+        // Initialize emotion chart
+        const ctx = document.getElementById('emotionChart').getContext('2d');
+        const emotionColors = {
+            'Happy': {
+                fill: 'rgba(75, 192, 192, 0.6)',
+                border: 'rgba(75, 192, 192, 1)'
+            },
+            'Sad': {
+                fill: 'rgba(54, 162, 235, 0.6)',
+                border: 'rgba(54, 162, 235, 1)'
+            },
+            'Angry': {
+                fill: 'rgba(255, 99, 132, 0.6)',
+                border: 'rgba(255, 99, 132, 1)'
+            },
+            'Surprise': {
+                fill: 'rgba(255, 206, 86, 0.6)',
+                border: 'rgba(255, 206, 86, 1)'
+            },
+            'Neutral': {
+                fill: 'rgba(153, 102, 255, 0.6)',
+                border: 'rgba(153, 102, 255, 1)'
+            }
+        };
+
+        const emotionChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: Object.entries(emotionColors).map(([emotion, colors]) => ({
+                    label: emotion,
+                    data: [],
+                    backgroundColor: colors.fill,
+                    borderColor: colors.border,
+                    fill: true,
+                    lineTension: 0.3,
+                    pointRadius: 0
+                }))
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    legend: {
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        },
+                        grid: {
+                            display: false
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        max: 1,
+                        title: {
+                            display: true,
+                            text: 'Emotion Intensity'
+                        }
+                    }
+                },
+                animation: false
+            }
+        });
+
+        // Handle socket connection status
+        socket.on('connect', () => {
+            console.log('Socket connected');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Socket disconnected');
+        });
+
+        socket.on('connect_error', (error) => {
+            console.log('Socket connection error:', error);
+        });
+
+        // Handle emotion updates
+        socket.on('emotion_update', function(data) {
+            // Add new timestamp
+            emotionChart.data.labels.push(data.timestamp);
+            
+            // Update each emotion dataset
+            emotionChart.data.datasets.forEach(dataset => {
+                const emotion = dataset.label.toLowerCase();
+                dataset.data.push(data.emotions[emotion]);
+            });
+            
+            // Keep last 20 data points
+            if (emotionChart.data.labels.length > 20) {
+                emotionChart.data.labels.shift();
+                emotionChart.data.datasets.forEach(dataset => dataset.data.shift());
+            }
+            
+            // Update chart without animation
+            emotionChart.update();
+        });
+
+        // Handle video recommendations
+        const videoRecommendationsEnabled = document.body.dataset.videoRecommendations === 'enabled';
+        
+        if (videoRecommendationsEnabled) {
+            socket.on('recommendations', function(data) {
+                const recommendationsSection = document.getElementById('recommendationsSection');
+                const recommendationsList = document.getElementById('recommendationsList');
+                const riskBadge = document.getElementById('riskBadge');
+                
+                const riskPercentage = Math.round(data.risk_score * 100);
+                riskBadge.textContent = `Risk Score: ${riskPercentage}%`;
+                
+                recommendationsList.innerHTML = '';
+                
+                data.videos.forEach(video => {
+                    const col = document.createElement('div');
+                    col.className = 'col-md-4 mb-3';
+                    
+                    col.innerHTML = `
+                        <div class="card h-100">
+                            <img src="${video.thumbnail}" class="card-img-top" alt="${video.title}">
+                            <div class="card-body">
+                                <h6 class="card-title">${video.title}</h6>
+                                <p class="card-text small">${video.description.substring(0, 100)}...</p>
+                                <div class="btn-group" role="group">
+                                    <a href="https://www.youtube.com/watch?v=${video.id}" 
+                                       class="btn btn-primary btn-sm" target="_blank">Watch</a>
+                                    <button class="btn btn-success btn-sm"
+                                            onclick="updatePreference('${video.id}', true)">👍</button>
+                                    <button class="btn btn-danger btn-sm"
+                                            onclick="updatePreference('${video.id}', false)">👎</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    recommendationsList.appendChild(col);
+                });
+                
+                recommendationsSection.style.display = 'block';
+            });
+
+            window.updatePreference = function(videoId, liked) {
+                fetch('/update_preference', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        video_id: videoId,
+                        liked: liked
+                    })
+                });
+            };
+        }
+
+        // Keep connection alive even when tab is not active
+        let hidden, visibilityChange;
+        if (typeof document.hidden !== "undefined") {
+            hidden = "hidden";
+            visibilityChange = "visibilitychange";
+        } else if (typeof document.msHidden !== "undefined") {
+            hidden = "msHidden";
+            visibilityChange = "msvisibilitychange";
+        } else if (typeof document.webkitHidden !== "undefined") {
+            hidden = "webkitHidden";
+            visibilityChange = "webkitvisibilitychange";
+        }
+
+        // Handle page visibility change
+        document.addEventListener(visibilityChange, function() {
+            if (!document[hidden]) {
+                // Page is visible again
+                console.log('Page visible - checking connections');
+                if (!socket.connected) {
+                    socket.connect();
+                }
+            }
+        }, false);
+
+        // Prevent disconnection when page is not visible
+        window.onbeforeunload = function() {
+            socket.disconnect();
+        };
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

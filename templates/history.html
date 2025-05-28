@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion History - Emotion Health Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Emotion Health Detection</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/history">History</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Time Range Selection -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Time Range</h5>
+                    </div>
+                    <div class="card-body">
+                        <select id="timeRange" class="form-select" onchange="updateCharts()">
+                            <option value="24">Last 24 Hours</option>
+                            <option value="72">Last 3 Days</option>
+                            <option value="168">Last Week</option>
+                            <option value="720">Last Month</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Emotion Trends -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Emotion Trends</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="emotionTrends"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Depression Risk Timeline -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Depression Risk Timeline</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="riskTimeline"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session Summary Table -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Session Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date/Time</th>
+                                        <th>Dominant Emotion</th>
+                                        <th>Risk Score</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sessionTable">
+                                    <!-- Session data will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize charts
+        const emotionTrends = new Chart(
+            document.getElementById('emotionTrends').getContext('2d'),
+            {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Happy', data: [], borderColor: 'rgb(75, 192, 192)' },
+                        { label: 'Sad', data: [], borderColor: 'rgb(54, 162, 235)' },
+                        { label: 'Angry', data: [], borderColor: 'rgb(255, 99, 132)' },
+                        { label: 'Surprise', data: [], borderColor: 'rgb(255, 206, 86)' },
+                        { label: 'Neutral', data: [], borderColor: 'rgb(153, 102, 255)' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1
+                        }
+                    }
+                }
+            }
+        );
+
+        const riskTimeline = new Chart(
+            document.getElementById('riskTimeline').getContext('2d'),
+            {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Depression Risk',
+                        data: [],
+                        borderColor: 'rgb(255, 99, 132)',
+                        fill: true,
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1
+                        }
+                    }
+                }
+            }
+        );
+
+        // Function to update charts based on selected time range
+        function updateCharts() {
+            const hours = document.getElementById('timeRange').value;
+            
+            fetch(`/api/history?hours=${hours}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Update emotion trends
+                    emotionTrends.data.labels = data.timestamps;
+                    data.emotions.forEach((emotion, index) => {
+                        emotionTrends.data.datasets[index].data = emotion;
+                    });
+                    emotionTrends.update();
+
+                    // Update risk timeline
+                    riskTimeline.data.labels = data.timestamps;
+                    riskTimeline.data.datasets[0].data = data.risk_scores;
+                    riskTimeline.update();
+
+                    // Update session table
+                    const sessionTable = document.getElementById('sessionTable');
+                    sessionTable.innerHTML = '';
+                    
+                    data.sessions.forEach(session => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${new Date(session.timestamp).toLocaleString()}</td>
+                            <td>${session.dominant_emotion}</td>
+                            <td>${Math.round(session.risk_score * 100)}%</td>
+                            <td>
+                                <span class="badge ${session.is_high_risk ? 'bg-danger' : 'bg-success'}">
+                                    ${session.is_high_risk ? 'High Risk' : 'Normal'}
+                                </span>
+                            </td>
+                        `;
+                        sessionTable.appendChild(row);
+                    });
+                });
+        }
+
+        // Initial chart update
+        updateCharts();
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

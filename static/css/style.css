@@ -1,0 +1,190 @@
+/* Main Styles */
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: none;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    height: 100%;
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid #eee;
+    padding: 15px 20px;
+    border-radius: 10px 10px 0 0 !important;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+/* Grid Layout */
+.row {
+    margin: 0 -15px;
+}
+
+.col-md-8 {
+    max-width: 400px; /* Thu nhỏ cột chứa video */
+    padding: 0 15px;
+}
+
+.col-md-4 {
+    flex: 1; /* Phần còn lại cho biểu đồ */
+    padding: 0 15px;
+}
+
+/* Video Feed */
+.video-container {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 75%; /* Tỷ lệ 4:3 */
+    overflow: hidden;
+    background-color: #000;
+    border-radius: 5px;
+}
+
+.video-container img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* Emotion Chart */
+#emotionChart {
+    min-height: 500px; /* Tăng kích thước biểu đồ */
+    width: 100%;
+}
+
+/* Video Recommendations */
+.recommendation-card {
+    transition: transform 0.2s;
+}
+
+.recommendation-card:hover {
+    transform: translateY(-5px);
+}
+
+.recommendation-card img {
+    height: 180px;
+    object-fit: cover;
+}
+
+.btn-group {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.btn-group .btn {
+    flex: 1;
+}
+
+/* History Page */
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+.badge {
+    padding: 8px 12px;
+    font-weight: 500;
+}
+
+/* Time Range Selection */
+.form-select {
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+}
+
+/* Risk Score Display */
+#riskBadge {
+    float: right;
+    padding: 8px 12px;
+    font-size: 0.9em;
+}
+
+/* Top Emotions Display */
+.top-emotions {
+    margin-top: 15px;
+    padding: 10px;
+    background: rgba(0,0,0,0.05);
+    border-radius: 5px;
+}
+
+.emotion-item {
+    display: flex;
+    justify-content: space-between;
+    margin: 5px 0;
+    padding: 5px;
+    background: rgba(255,255,255,0.8);
+    border-radius: 3px;
+}
+
+.emotion-label {
+    font-weight: 500;
+}
+
+.emotion-value {
+    color: #666;
+}
+
+/* Custom Container for Video and Chart */
+.video-chart-container {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+}
+
+.video-section {
+    flex: 0 0 400px; /* Cố định kích thước phần video */
+    max-width: 400px;
+}
+
+.chart-section {
+    flex: 1; /* Phần còn lại cho biểu đồ */
+    min-height: 500px;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .video-chart-container {
+        flex-direction: column;
+    }
+    
+    .video-section,
+    .chart-section {
+        flex: none;
+        width: 100%;
+        max-width: 100%;
+    }
+    
+    .video-container {
+        padding-bottom: 75%;
+    }
+    
+    #emotionChart {
+        min-height: 300px;
+    }
+}
