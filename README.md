@@ -1,100 +1,80 @@
-# Emotion Health Detection System
+# Emotion Health Detection
 
-Hệ thống phát hiện và phân tích cảm xúc thời gian thực từ webcam, với các tính năng:
-- Nhận diện khuôn mặt
-- Phân tích cảm xúc (hạnh phúc, buồn, giận dữ, ngạc nhiên, trung tính)
-- Theo dõi cảm xúc thông qua biểu đồ thời gian thực
-- Phát hiện nguy cơ trầm cảm
-- Đề xuất video dựa trên trạng thái cảm xúc
+Hệ thống phân tích cảm xúc và đề xuất video dựa trên trạng thái cảm xúc.
 
-## Cài đặt
+## Tính Năng Mới
 
-1. Clone repository:
-```bash
-git clone https://github.com/Belze1/emotion-health-detection.git
-cd emotion-health-detection
-```
+- Cải thiện hệ thống gợi ý video:
+  - Phân tích cảm xúc thời gian thực
+  - Tìm kiếm video phù hợp dựa trên trạng thái cảm xúc
+  - Sử dụng embeddings để so sánh ngữ nghĩa
+  - Cập nhật gợi ý real-time qua WebSocket
 
-2. Tạo và kích hoạt môi trường ảo:
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# HOẶC
-venv\Scripts\activate  # Windows
-```
+## Cài Đặt
 
-3. Cài đặt các thư viện cần thiết:
+1. Cài đặt dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Tạo file .env từ mẫu .env.example:
+2. Cấu hình môi trường:
 ```bash
 cp .env.example .env
 ```
+- Thêm YouTube API key vào file .env
+- Điều chỉnh các thông số khác nếu cần
 
-5. Cập nhật các biến môi trường trong file .env:
-- YOUTUBE_API_KEY: API key của YouTube (để sử dụng tính năng đề xuất video)
-- Các cài đặt khác như độ phân giải webcam, khoảng thời gian kiểm tra, v.v.
+3. Chuẩn bị dữ liệu:
+```bash
+mkdir -p data models/embeddings
+# Copy file CSV vào thư mục data/
+```
 
-## Sử dụng
-
-1. Khởi động ứng dụng:
+4. Chạy ứng dụng:
 ```bash
 python main.py
 ```
 
-2. Truy cập ứng dụng tại: http://localhost:5000
-
-## Tính năng
-
-### 1. Nhận diện khuôn mặt và cảm xúc
-- Sử dụng MediaPipe để phát hiện khuôn mặt
-- Phân tích cảm xúc thời gian thực
-- Hiển thị kết quả trực tiếp trên video stream
-
-### 2. Phân tích cảm xúc
-- Biểu đồ thời gian thực hiển thị các cảm xúc
-- Theo dõi xu hướng cảm xúc theo thời gian
-- Stacked area chart cho phép quan sát tỷ lệ các cảm xúc
-
-### 3. Phát hiện trầm cảm
-- Phân tích mẫu cảm xúc để phát hiện nguy cơ
-- Cảnh báo khi phát hiện dấu hiệu rủi ro
-- Lưu trữ lịch sử để theo dõi dài hạn
-
-### 4. Đề xuất video
-- Dựa trên trạng thái cảm xúc hiện tại
-- Tích hợp với YouTube API
-- Hệ thống đánh giá và phản hồi
-
-## Cấu trúc project
+## Cấu Trúc Thư Mục
 
 ```
-emotion-health-detection/
-├── modules/
-│   ├── face_detector.py        # Nhận diện khuôn mặt
-│   ├── emotion_analyzer.py     # Phân tích cảm xúc
-│   ├── depression_predictor.py # Dự đoán trầm cảm
-│   ├── video_recommender.py    # Đề xuất video
-│   └── utils.py               # Công cụ hỗ trợ
-├── static/
-│   ├── css/                   # Styles
-│   └── js/                    # JavaScript
+.
+├── data/                      # Dữ liệu
+│   └── cleaned_youtube_metadata.csv
+├── models/                    # Model và cache
+│   └── embeddings/
+├── modules/                   # Code chính
+│   ├── emotion_analyzer.py
+│   ├── face_detector.py
+│   ├── video_recommender.py
+│   └── ...
+├── static/                    # Assets
+│   ├── css/
+│   └── js/
 ├── templates/                 # HTML templates
-├── main.py                   # Ứng dụng chính
-├── requirements.txt          # Dependencies
-└── .env                     # Cấu hình
+├── .env                      # Cấu hình
+├── .env.example              # Template cấu hình
+└── main.py                   # Entry point
 ```
 
-## Công nghệ sử dụng
+## Yêu Cầu Hệ Thống
 
-- **Backend**: Python, Flask, SocketIO
-- **Frontend**: HTML, CSS, JavaScript, Chart.js
-- **Computer Vision**: OpenCV, MediaPipe
-- **Machine Learning**: TensorFlow, DeepFace
-- **APIs**: YouTube Data API
+- Python 3.8+
+- Webcam
+- YouTube API key
+- Thư viện: xem requirements.txt
 
-## Đóng góp
+## Sử Dụng
 
-Mọi đóng góp đều được chào đón! Hãy tạo issues hoặc pull requests để cải thiện project.
+1. Mở http://localhost:5000
+2. Cho phép truy cập webcam
+3. Hệ thống sẽ:
+   - Phân tích cảm xúc qua webcam
+   - Hiển thị biểu đồ cảm xúc realtime
+   - Gợi ý video phù hợp với trạng thái
+
+## Lưu Ý
+
+- Đảm bảo file CSV chứa dữ liệu video đúng định dạng
+- YouTube API key cần có quyền truy cập API Data
+- Cache embeddings được lưu tại models/embeddings/

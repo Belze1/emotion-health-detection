@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gợi Ý Video Dựa Trên Cảm Xúc</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">Phân Tích Cảm Xúc</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Trang Chủ</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/history">Lịch Sử</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="status-message" id="statusMessage">
+            Đang chờ dữ liệu cảm xúc...
+        </div>
+        
+        <div class="emotion-display" id="emotionDisplay"></div>
+        
+        <div class="video-container" id="videoContainer">
+            <div class="loading">Đang chờ dữ liệu...</div>
+        </div>
+        
+        <button class="refresh-button" id="refreshButton">
+            Tải Thêm Video
+        </button>
+    </div>
+
+    <script>
+        let currentEmotions = null;
+        const socket = io({
+            transports: ['websocket'],
+            upgrade: false,
+            reconnection: true,
+            reconnectionAttempts: 5
+        });
+
+        // Lấy dữ liệu cảm xúc từ localStorage nếu có
+        const savedEmotions = localStorage.getItem('currentEmotions');
+        if (savedEmotions) {
+            try {
+                currentEmotions = JSON.parse(savedEmotions);
+                updateEmotionDisplay();
+                fetchRecommendations();
+            } catch (e) {
+                console.error('Error parsing saved emotions:', e);
+            }
+        }
+
+        socket.on('connect', function() {
+            console.log('Socket connected');
+        });
+
+        socket.on('disconnect', function() {
+            console.log('Socket disconnected');
+        });
+
+        socket.on('emotion_update', function(data) {
+            console.log('Received emotion update:', data);
+            currentEmotions = data.emotions;
+            
+            // Lưu cảm xúc vào localStorage
+            localStorage.setItem('currentEmotions', JSON.stringify(currentEmotions));
+            
+            updateEmotionDisplay();
+            fetchRecommendations();
+        });
+
+        function updateEmotionDisplay() {
+            const display = document.getElementById('emotionDisplay');
+            display.innerHTML = '';
+            
+            if (!currentEmotions) {
+                display.innerHTML = '<div class="emotion-item neutral">Chưa có dữ liệu cảm xúc</div>';
+                return;
+            }
+            
+            const emotions = {
+                'happy': 'Vui vẻ',
+                'sad': 'Buồn',
+                'angry': 'Giận dữ',
+                'surprise': 'Ngạc nhiên',
+                'neutral': 'Bình thường'
+            };
+            
+            for (const [key, value] of Object.entries(currentEmotions)) {
+                const item = document.createElement('div');
+                item.className = `emotion-item ${key}`;
+                item.textContent = `${emotions[key]}: ${Math.round(value * 100)}%`;
+                display.appendChild(item);
+            }
+        }
+
+        function fetchRecommendations() {
+            if (!currentEmotions) {
+                document.getElementById('statusMessage').textContent = 'Đang chờ dữ liệu cảm xúc...';
+                return;
+            }
+
+            document.getElementById('statusMessage').textContent = 'Đang tìm kiếm video phù hợp...';
+            document.getElementById('videoContainer').innerHTML = '<div class="loading">Đang tải...</div>';
+            
+            fetch('/api/recommendations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ emotion_data: currentEmotions })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                displayVideos(data.recommendations);
+                document.getElementById('statusMessage').textContent = 
+                    'Video được gợi ý dựa trên cảm xúc trong 5 phút gần đây';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('statusMessage').textContent = `Lỗi: ${error.message}`;
+                document.getElementById('videoContainer').innerHTML = 
+                    '<div class="loading">Không thể tải video. Vui lòng thử lại.</div>';
+            });
+        }
+
+        function displayVideos(videos) {
+            const container = document.getElementById('videoContainer');
+            container.innerHTML = '';
+            
+            if (!videos || videos.length === 0) {
+                container.innerHTML = '<div class="loading">Không tìm thấy video phù hợp</div>';
+                return;
+            }
+            
+            videos.forEach(video => {
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                
+                const similarity = Math.round(video.similarity * 100);
+                
+                card.innerHTML = `
+                    <iframe 
+                        class="video-frame"
+                        src="https://www.youtube.com/embed/${video.video_id}"
+                        frameborder="0"
+                        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen>
+                    </iframe>
+                    <div class="video-info">
+                        <div class="video-title">${video.title}</div>
+                        <div class="similarity-score">Độ phù hợp: ${similarity}%</div>
+                        <div class="feedback-buttons">
+                            <button class="feedback-button like-button" onclick="sendFeedback('${video.video_id}', 'like')">
+                                👍 Thích
+                            </button>
+                            <button class="feedback-button dislike-button" onclick="sendFeedback('${video.video_id}', 'dislike')">
+                                👎 Không thích
+                            </button>
+                            <button class="feedback-button skip-button" onclick="sendFeedback('${video.video_id}', 'skip')">
+                                ⏭️ Bỏ qua
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        function sendFeedback(videoId, feedbackType) {
+            document.getElementById('statusMessage').textContent = 'Đang cập nhật phản hồi...';
+            
+            fetch('/api/feedback', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    video_id: videoId,
+                    feedback_type: feedbackType,
+                    emotion_data: currentEmotions
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                if (feedbackType !== 'skip') {
+                    setTimeout(fetchRecommendations, 1000);
+                }
+                document.getElementById('statusMessage').textContent = 'Cảm ơn phản hồi của bạn!';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('statusMessage').textContent = 
+                    'Không thể cập nhật phản hồi. Vui lòng thử lại.';
+            });
+        }
+
+        document.getElementById('refreshButton').addEventListener('click', fetchRecommendations);
+
+        // Kiểm tra và cập nhật ngay khi tải trang
+        if (currentEmotions) {
+            updateEmotionDisplay();
+            fetchRecommendations();
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -22,18 +22,22 @@ wheels/
 
 # Virtual Environment
 venv/
-ENV/
 env/
-.env
+ENV/
 
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
 
 # Project specific
-data/
-models/
+.env
 *.log
-*.sqlite3
+data/user_preferences.json
+models/embeddings/*
+!models/embeddings/.gitkeep
+
+# Temporary files
+.DS_Store
+Thumbs.db
