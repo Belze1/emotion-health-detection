@@ -24,7 +24,16 @@ from modules.utils import (
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-secret-key')
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+app.config['JSON_SORT_KEYS'] = False
+
+# Cấu hình SocketIO với async mode là threading và disable debug logs
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode='threading',
+    logger=False,
+    engineio_logger=False
+)
 
 # Global variables
 global_cap = None  # Shared webcam instance
@@ -32,11 +41,13 @@ cap_lock = threading.Lock()
 frame_lock = threading.Lock()
 current_emotions = None
 last_risk_check = datetime.now()
+last_socket_update = 0
 risk_check_interval = int(os.getenv('RISK_CHECK_INTERVAL', 300))
-last_socket_update = 0  # Throttle socket updates
+socket_update_interval = float(os.getenv('SOCKET_UPDATE_INTERVAL', 1.0))  # Giới hạn update mỗi 1 giây
+
+print("Initializing components...")
 
 # Initialize components
-print("Initializing components...")
 face_detector = FaceDetector()
 emotion_analyzer = EmotionAnalyzer()
 depression_predictor = DepressionPredictor()
@@ -95,14 +106,17 @@ def process_frame():
                 if result:
                     current_emotions = result['emotions']
                     
-                    # Throttle socket updates to once per second
+                    # Throttle socket updates
                     current_time = time.time()
-                    if current_time - last_socket_update >= 1.0:
-                        socketio.emit('emotion_update', {
-                            'timestamp': datetime.now().strftime('%H:%M:%S'),
-                            'emotions': current_emotions
-                        })
-                        last_socket_update = current_time
+                    if current_time - last_socket_update >= socket_update_interval:
+                        try:
+                            socketio.emit('emotion_update', {
+                                'timestamp': datetime.now().strftime('%H:%M:%S'),
+                                'emotions': current_emotions
+                            })
+                            last_socket_update = current_time
+                        except Exception as e:
+                            print(f"Error emitting emotion update: {e}")
                     
                     # Check depression risk periodically
                     current_time = datetime.now()
@@ -115,17 +129,20 @@ def process_frame():
                             recommendations = video_recommender.get_video_recommendations(
                                 current_emotions
                             )
-                            socketio.emit('recommendations', {
-                                'videos': recommendations,
-                                'risk_score': risk_score
-                            })
+                            try:
+                                socketio.emit('recommendations', {
+                                    'videos': recommendations,
+                                    'risk_score': float(risk_score)
+                                })
+                            except Exception as e:
+                                print(f"Error emitting recommendations: {e}")
                             
                         last_risk_check = current_time
                         save_session_data({
                             'timestamp': current_time.isoformat(),
                             'emotions': current_emotions,
-                            'risk_score': risk_score,
-                            'is_high_risk': is_high_risk
+                            'risk_score': float(risk_score),
+                            'is_high_risk': bool(is_high_risk)
                         })
                     
         return frame_with_faces
@@ -190,11 +207,19 @@ def get_recommendations():
         }), 503
     
     try:
-        emotion_data = request.json.get('emotion_data')
+        data = request.json
+        emotion_data = data.get('emotion_data')
+        exclude_videos = data.get('exclude_videos', [])
+        
         if not emotion_data:
             return jsonify({'error': 'No emotion data provided'}), 400
             
-        recommendations = video_recommender.get_video_recommendations(emotion_data)
+        recommendations = video_recommender.get_video_recommendations(
+            emotion_data, 
+            exclude_videos=exclude_videos,
+            num_recommendations=8  # Lấy nhiều hơn để có video dự phòng
+        )
+        
         return jsonify({'recommendations': recommendations})
         
     except Exception as e:
@@ -214,8 +239,8 @@ def handle_feedback():
         video_id = data.get('video_id')
         feedback_type = data.get('feedback_type')
         
-        if not video_id:
-            return jsonify({'error': 'No video ID provided'}), 400
+        if not video_id or not feedback_type:
+            return jsonify({'error': 'Missing required data'}), 400
             
         video_recommender.update_model(video_id, feedback_type)
         return jsonify({'status': 'success'})
@@ -228,10 +253,13 @@ def handle_feedback():
 def handle_connect():
     """Handle client connection."""
     if current_emotions:
-        emit('emotion_update', {
-            'timestamp': datetime.now().strftime('%H:%M:%S'),
-            'emotions': current_emotions
-        })
+        try:
+            emit('emotion_update', {
+                'timestamp': datetime.now().strftime('%H:%M:%S'),
+                'emotions': current_emotions
+            })
+        except Exception as e:
+            print(f"Error emitting initial emotions: {e}")
 
 def cleanup():
     """Clean up resources."""
@@ -254,7 +282,7 @@ if __name__ == '__main__':
             app,
             host='0.0.0.0',
             port=5000,
-            debug=os.getenv('FLASK_DEBUG', '0') == '1'
+            debug=False  # Tắt debug mode để tránh các lỗi với socket
         )
     finally:
         cleanup()

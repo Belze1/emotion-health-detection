@@ -16,6 +16,18 @@ from dotenv import load_dotenv
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
+def convert_to_json_serializable(obj):
+    """Convert numpy types to Python native types"""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, pd.Series):
+        return obj.to_dict()
+    return obj
+
 class VideoRecommender:
     def __init__(self, csv_path='data/cleaned_youtube_metadata.csv', cache_dir='models/embeddings'):
         self.csv_path = csv_path
@@ -46,7 +58,6 @@ class VideoRecommender:
                 return
 
             self.df = pd.read_csv(self.csv_path)
-            # Remove rows with empty or invalid content
             self.df = self.df[self.df['cleaned_content'].notna() & (self.df['cleaned_content'].str.len() > 0)]
             self.df = self.df.reset_index(drop=True)
             logging.info(f"Loaded {len(self.df)} valid videos from CSV")
@@ -61,8 +72,7 @@ class VideoRecommender:
         if os.path.exists(cache_path):
             try:
                 with open(cache_path, 'rb') as f:
-                    cached_data = pickle.load(f)
-                    self.video_embeddings = cached_data if isinstance(cached_data, dict) else {}
+                    self.video_embeddings = pickle.load(f)
                 logging.info(f"Loaded {len(self.video_embeddings)} embeddings from cache")
             except:
                 self._generate_embeddings(cache_path)
@@ -79,7 +89,7 @@ class VideoRecommender:
         for i in range(0, total_videos, batch_size):
             batch_df = self.df.iloc[i:i+batch_size]
             try:
-                embeddings = self.model.encode(batch_df['cleaned_content'].tolist())
+                embeddings = self.model.encode(batch_df['cleaned_content'].tolist(), normalize_embeddings=True)
                 for j, row in batch_df.iterrows():
                     self.video_embeddings[row['video_id']] = embeddings[j-i]
             except Exception as e:
@@ -96,48 +106,66 @@ class VideoRecommender:
             logging.info("Saved embeddings to cache")
         except Exception as e:
             logging.error(f"Error saving cache: {str(e)}")
-        
+
     def encode_emotions(self, emotions):
+        """Chuyển đổi tất cả cảm xúc và tỷ lệ thành text description"""
         try:
-            # Get dominant emotion
-            dominant = max(emotions.items(), key=lambda x: x[1])[0]
-            strength = emotions[dominant]
+            # Sắp xếp cảm xúc theo tỷ lệ giảm dần
+            sorted_emotions = sorted(emotions.items(), key=lambda x: x[1], reverse=True)
             
-            # Create search query based on emotions
-            if dominant == 'happy' and strength > 0.5:
-                return "I want to watch something fun happy entertaining positive uplifting cheerful video"
-            elif dominant == 'sad' and strength > 0.5:
-                return "I want to watch something motivational inspiring encouraging uplifting hopeful video"
-            elif dominant == 'angry' and strength > 0.5:
-                return "I want to watch something calming peaceful relaxing meditative soothing video"
-            elif dominant == 'surprise' and strength > 0.5:
-                return "I want to watch something amazing fascinating incredible interesting exciting video"
-            else:
-                return "I want to watch something entertaining educational interesting engaging informative video"
-                
+            # Tạo mô tả dựa trên tổ hợp cảm xúc
+            description = ["Content that combines "]
+            
+            for emotion, ratio in sorted_emotions:
+                if ratio > 0.1:  # Chỉ xét cảm xúc > 10%
+                    if emotion == 'happy':
+                        description.append(f"uplifting and fun content ({int(ratio*100)}%)")
+                    elif emotion == 'sad':
+                        description.append(f"motivational and inspiring content ({int(ratio*100)}%)")
+                    elif emotion == 'angry':
+                        description.append(f"calming and peaceful content ({int(ratio*100)}%)")
+                    elif emotion == 'surprise':
+                        description.append(f"amazing and fascinating content ({int(ratio*100)}%)")
+                    elif emotion == 'neutral':
+                        description.append(f"balanced and informative content ({int(ratio*100)}%)")
+            
+            if len(description) == 1:
+                description.append("entertaining and engaging content")
+            
+            final_text = " with ".join(description)
+            logging.info(f"Generated description: {final_text}")
+            
+            # Encode và normalize
+            embedding = self.model.encode([final_text], normalize_embeddings=True)[0]
+            return embedding
+            
         except Exception as e:
             logging.error(f"Error encoding emotions: {str(e)}")
-            return "I want to watch something entertaining and interesting"
+            return self.model.encode(["entertaining and engaging content"], normalize_embeddings=True)[0]
 
-    def get_video_recommendations(self, emotions, num_candidates=20, num_recommendations=4):
+    def get_video_recommendations(self, emotions, exclude_videos=None, num_candidates=20, num_recommendations=4):
         try:
             if len(self.video_embeddings) == 0:
                 logging.error("No video embeddings available")
                 return []
+            
+            # Convert exclude_videos to set for faster lookup    
+            exclude_set = set(exclude_videos) if exclude_videos else set()
                 
-            # Get emotion query
-            query = self.encode_emotions(emotions)
-            logging.info(f"Emotion query: {query}")
+            # Get emotion embedding
+            query_embedding = self.encode_emotions(emotions)
             
-            # Get query embedding
-            query_embedding = self.model.encode([query])[0]
-            
-            # Calculate similarities
+            # Calculate similarities for all available videos
             similarities = {}
             for video_id, video_embedding in self.video_embeddings.items():
+                # Skip excluded videos
+                if video_id in exclude_set:
+                    continue
+                    
                 try:
-                    sim = 1 - cosine(query_embedding, video_embedding)
-                    similarities[video_id] = sim
+                    sim = float(1 - cosine(query_embedding, video_embedding))
+                    if not np.isnan(sim):
+                        similarities[video_id] = sim
                 except:
                     continue
                     
@@ -150,12 +178,17 @@ class VideoRecommender:
             for video_id, sim in sorted(similarities.items(), key=lambda x: x[1], reverse=True)[:num_recommendations]:
                 try:
                     video_data = self.df[self.df['video_id'] == video_id].iloc[0]
-                    video_info = video_data.to_dict()
-                    video_info['similarity'] = float(sim)
+                    video_info = {
+                        'video_id': str(video_data['video_id']),
+                        'title': str(video_data['title']),
+                        'similarity': float(sim)
+                    }
                     
                     if hasattr(self, 'youtube'):
                         video_info['thumbnail'] = f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"
                         
+                    # Convert all values to JSON serializable types
+                    video_info = {k: convert_to_json_serializable(v) for k, v in video_info.items()}
                     top_videos.append(video_info)
                     logging.info(f"Selected video: {video_id} (similarity: {sim:.3f})")
                 except Exception as e:
