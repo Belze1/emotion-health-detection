@@ -1,193 +1,301 @@
-"""Depression risk prediction module using emotion patterns."""
+"""Module dự đoán nguy cơ trầm cảm dựa trên phân tích đa chiều."""
 
+import json
 import numpy as np
-from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import StandardScaler
-import joblib
-import os
-from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
+import os
+import logging
+from collections import defaultdict
 
 class DepressionPredictor:
-    def __init__(self, model_path: str = 'models/depression_model.pkl'):
-        """Initialize the depression predictor.
+    def __init__(self):
+        self.history_file = "data/depression_history.json"
+        self.session_file = "data/session_data.json"
+        self.assessment_interval = timedelta(hours=24)  # Đánh giá mỗi 24 giờ
+        self.last_assessment = None
+        self.history = []
         
-        Args:
-            model_path: Path to the trained model file
-        """
-        self.model_path = model_path
-        self.model = None
-        self.scaler = StandardScaler()
-        self.risk_threshold = 0.7  # High risk threshold
-        self.load_model()
+        # Ngưỡng cảnh báo
+        self.thresholds = {
+            'negative_emotion_ratio': 0.6,  # 60% cảm xúc tiêu cực
+            'emotion_variance': 0.1,  # Hệ số phương sai tối thiểu
+            'dislike_ratio': 0.7,  # 70% tỷ lệ dislike
+            'usage_duration': 3  # Số giờ sử dụng liên tục
+        }
         
-    def load_model(self):
-        """Load the trained model if it exists, otherwise create a new one."""
+        self.load_history()
+
+    def load_history(self):
+        """Tải lịch sử đánh giá từ file."""
         try:
-            if os.path.exists(self.model_path):
-                loaded = joblib.load(self.model_path)
-                self.model = loaded['model']
-                self.scaler = loaded['scaler']
-            else:
-                # Initialize new model if no saved model exists
-                self.model = MLPClassifier(
-                    hidden_layer_sizes=(64, 32),
-                    activation='relu',
-                    solver='adam',
-                    max_iter=1000
-                )
-                print("Created new model - training required")
+            # Tải dữ liệu từ session_data.json nếu có
+            if os.path.exists(self.session_file):
+                with open(self.session_file, 'r') as f:
+                    session_data = json.load(f)
+                    
+                    # Chuyển đổi dữ liệu session thành đánh giá
+                    for session in session_data:
+                        assessment = {
+                            'timestamp': session['timestamp'],
+                            'risk_score': float(session.get('risk_score', 0.5)),
+                            'risk_level': session.get('risk_level', 'medium'),
+                            'metrics': {
+                                'emotion_patterns': {
+                                    'negative_ratio': float(session['emotions'].get('sad', 0) + 
+                                                         session['emotions'].get('angry', 0)),
+                                    'emotion_variance': float(np.var(list(session['emotions'].values()))),
+                                    'num_records': 1
+                                }
+                            }
+                        }
+                        self.history.append(assessment)
+
+            # Tải thêm dữ liệu từ depression_history.json nếu có
+            if os.path.exists(self.history_file):
+                with open(self.history_file, 'r') as f:
+                    data = json.load(f)
+                    self.history.extend(data.get('assessments', []))
+                    last_time = data.get('last_assessment')
+                    if last_time:
+                        self.last_assessment = datetime.fromisoformat(last_time)
+                    
+            # Sắp xếp theo thời gian và loại bỏ trùng lặp
+            if self.history:
+                self.history.sort(key=lambda x: x['timestamp'])
+                # Giữ bản ghi mới nhất cho mỗi timestamp
+                unique_history = {}
+                for assessment in self.history:
+                    unique_history[assessment['timestamp']] = assessment
+                self.history = list(unique_history.values())
+                
         except Exception as e:
-            print(f"Error loading model: {str(e)}")
-            
-    def save_model(self):
-        """Save the current model and scaler."""
+            logging.error(f"Error loading depression history: {e}")
+            self.history = []
+            self.last_assessment = None
+
+    def save_history(self):
+        """Lưu lịch sử đánh giá."""
         try:
-            os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
-            joblib.dump({
-                'model': self.model,
-                'scaler': self.scaler
-            }, self.model_path)
+            os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
+            with open(self.history_file, 'w') as f:
+                json.dump({
+                    'last_assessment': self.last_assessment.isoformat() if self.last_assessment else None,
+                    'assessments': self.history
+                }, f, indent=2)
         except Exception as e:
-            print(f"Error saving model: {str(e)}")
-            
-    def extract_features(self, emotion_history: List[Dict]) -> Optional[np.ndarray]:
-        """Extract features from emotion history for prediction.
-        
-        Args:
-            emotion_history: List of emotion readings with timestamps
-            
-        Returns:
-            Feature vector as numpy array or None if extraction fails
-        """
+            logging.error(f"Error saving depression history: {e}")
+
+    def analyze_emotion_patterns(self, emotion_history, timeframe_hours=24):
+        """Phân tích mô hình cảm xúc trong khoảng thời gian."""
         try:
             if not emotion_history:
                 return None
                 
-            # Get emotions from most recent entry
-            emotions = list(emotion_history[-1]['emotions'].keys())
+            # Lọc dữ liệu trong timeframe
+            current_time = datetime.now()
+            cutoff_time = current_time - timedelta(hours=timeframe_hours)
             
-            # Calculate features
-            features = []
+            recent_emotions = [
+                entry for entry in emotion_history 
+                if datetime.fromisoformat(entry['timestamp']) > cutoff_time
+            ]
             
-            # Average emotion probabilities
-            emotion_sums = {e: 0.0 for e in emotions}
-            for entry in emotion_history:
-                for emotion, prob in entry['emotions'].items():
-                    emotion_sums[emotion] += prob
-            avg_emotions = [value / len(emotion_history) for value in emotion_sums.values()]
-            features.extend(avg_emotions)
+            if not recent_emotions:
+                return None
+                
+            # Tính tỷ lệ cảm xúc tiêu cực
+            negative_ratios = []
+            variances = []
             
-            # Emotional volatility (std dev of probabilities)
-            volatility = []
-            for emotion in emotions:
-                probs = [entry['emotions'][emotion] for entry in emotion_history]
-                volatility.append(np.std(probs))
-            features.extend(volatility)
+            for entry in recent_emotions:
+                emotions = entry['emotions']
+                negative_ratio = emotions.get('sad', 0) + emotions.get('angry', 0)
+                negative_ratios.append(negative_ratio)
+                
+                values = list(emotions.values())
+                variances.append(np.var(values) if values else 0)
             
-            # Negative emotion ratio
-            negative_emotions = ['sad', 'angry']
-            total_negative = sum(emotion_sums[e] for e in negative_emotions)
-            total_all = sum(emotion_sums.values())
-            negative_ratio = total_negative / total_all if total_all > 0 else 0
-            features.append(negative_ratio)
-            
-            # Emotion transitions
-            transitions = 0
-            for i in range(1, len(emotion_history)):
-                if emotion_history[i]['dominant_emotion'] != emotion_history[i-1]['dominant_emotion']:
-                    transitions += 1
-            transition_rate = transitions / len(emotion_history)
-            features.append(transition_rate)
-            
-            return np.array(features).reshape(1, -1)
+            return {
+                'negative_ratio': float(np.mean(negative_ratios)),
+                'emotion_variance': float(np.mean(variances)),
+                'num_records': len(recent_emotions)
+            }
             
         except Exception as e:
-            print(f"Error extracting features: {str(e)}")
+            logging.error(f"Error analyzing emotion patterns: {e}")
             return None
-            
-    def predict_risk(self, emotion_history: List[Dict]) -> Tuple[float, bool]:
-        """Predict depression risk from emotion history.
-        
-        Args:
-            emotion_history: List of emotion readings with timestamps
-            
-        Returns:
-            Tuple of (risk_score, is_high_risk)
-        """
+
+    def analyze_usage_patterns(self, emotion_history, timeframe_hours=24):
+        """Phân tích mẫu hình sử dụng."""
         try:
-            # Extract features
-            features = self.extract_features(emotion_history)
-            if features is None:
-                return 0.0, False
+            if not emotion_history:
+                return None
                 
-            # Scale features
-            features_scaled = self.scaler.transform(features)
+            current_time = datetime.now()
+            cutoff_time = current_time - timedelta(hours=timeframe_hours)
             
-            # Get prediction probability
-            risk_score = self.model.predict_proba(features_scaled)[0][1]
-            is_high_risk = risk_score >= self.risk_threshold
+            usage_times = [
+                datetime.fromisoformat(entry['timestamp'])
+                for entry in emotion_history 
+                if datetime.fromisoformat(entry['timestamp']) > cutoff_time
+            ]
             
-            return risk_score, is_high_risk
+            if not usage_times:
+                return None
+                
+            usage_duration = max([
+                (t2 - t1).total_seconds() / 3600
+                for t1, t2 in zip(usage_times, usage_times[1:])
+                if (t2 - t1).total_seconds() <= 3600
+            ] + [0])
+            
+            hour_distribution = defaultdict(int)
+            for time in usage_times:
+                hour_distribution[time.hour] += 1
+                
+            late_night_usage = sum(
+                count for hour, count in hour_distribution.items()
+                if 23 <= hour or hour <= 4
+            ) / len(usage_times) if usage_times else 0
+            
+            return {
+                'max_continuous_usage': float(usage_duration),
+                'late_night_ratio': float(late_night_usage),
+                'num_sessions': len(usage_times)
+            }
             
         except Exception as e:
-            print(f"Error predicting risk: {str(e)}")
-            return 0.0, False
-            
-    def train(self, emotion_histories: List[List[Dict]], labels: List[int]):
-        """Train the model on labeled emotion histories.
-        
-        Args:
-            emotion_histories: List of emotion history sequences
-            labels: Binary labels (0: no depression, 1: depression)
-        """
+            logging.error(f"Error analyzing usage patterns: {e}")
+            return None
+
+    def analyze_interaction_patterns(self, user_preferences):
+        """Phân tích mẫu hình tương tác với nội dung."""
         try:
-            # Extract features from all histories
-            features = []
-            for history in emotion_histories:
-                feature_vector = self.extract_features(history)
-                if feature_vector is not None:
-                    features.append(feature_vector.flatten())
-                    
-            if not features:
-                print("No valid features extracted for training")
-                return
+            if not user_preferences:
+                return None
                 
-            features = np.array(features)
+            total_likes = 0
+            total_dislikes = 0
             
-            # Scale features
-            features_scaled = self.scaler.fit_transform(features)
-            
-            # Train model
-            self.model.fit(features_scaled, labels)
-            
-            # Save trained model
-            self.save_model()
+            for video_data in user_preferences.values():
+                total_likes += video_data.get('likes', 0)
+                total_dislikes += video_data.get('dislikes', 0)
+                
+            total_interactions = total_likes + total_dislikes
+            if total_interactions == 0:
+                return None
+                
+            return {
+                'dislike_ratio': float(total_dislikes / total_interactions),
+                'total_interactions': total_interactions
+            }
             
         except Exception as e:
-            print(f"Error training model: {str(e)}")
-            
-    def update_model(self, emotion_history: List[Dict], label: int):
-        """Update model with new training example.
-        
-        Args:
-            emotion_history: New emotion history sequence
-            label: Binary label (0: no depression, 1: depression)
-        """
+            logging.error(f"Error analyzing interaction patterns: {e}")
+            return None
+
+    def calculate_risk_score(self, emotion_data, usage_data, interaction_data):
+        """Tính điểm nguy cơ dựa trên các chỉ số."""
         try:
-            # Extract features
-            features = self.extract_features(emotion_history)
-            if features is None:
-                return
+            score = 0
+            max_score = 0
+            
+            if emotion_data:
+                # Đánh giá mức độ cảm xúc tiêu cực
+                if emotion_data['negative_ratio'] > self.thresholds['negative_emotion_ratio']:
+                    score += 3
+                elif emotion_data['negative_ratio'] > self.thresholds['negative_emotion_ratio'] * 0.8:
+                    score += 2
+                max_score += 3
                 
-            # Update scaler and transform features
-            features_scaled = self.scaler.partial_fit(features).transform(features)
+                # Đánh giá độ biến thiên cảm xúc
+                if emotion_data['emotion_variance'] < self.thresholds['emotion_variance']:
+                    score += 2
+                max_score += 2
+                
+            if usage_data:
+                # Đánh giá thời gian sử dụng
+                if usage_data['max_continuous_usage'] > self.thresholds['usage_duration']:
+                    score += 2
+                max_score += 2
+                
+                # Đánh giá sử dụng đêm khuya
+                if usage_data['late_night_ratio'] > 0.3:
+                    score += 2
+                max_score += 2
+                
+            if interaction_data:
+                # Đánh giá tỷ lệ dislike
+                if interaction_data['dislike_ratio'] > self.thresholds['dislike_ratio']:
+                    score += 2
+                elif interaction_data['dislike_ratio'] > self.thresholds['dislike_ratio'] * 0.8:
+                    score += 1
+                max_score += 2
+                
+            normalized_score = score / max_score if max_score > 0 else 0
             
-            # Update model
-            self.model.partial_fit(features_scaled, [label], classes=[0, 1])
-            
-            # Save updated model
-            self.save_model()
+            return normalized_score, self._classify_risk(normalized_score)
             
         except Exception as e:
-            print(f"Error updating model: {str(e)}")
+            logging.error(f"Error calculating risk score: {e}")
+            return 0, "low"
+
+    def _classify_risk(self, score):
+        """Phân loại mức độ nguy cơ."""
+        if score >= 0.7:
+            return "high"
+        elif score >= 0.4:
+            return "medium"
+        return "low"
+
+    def predict_risk(self, emotion_history, user_preferences=None):
+        """Đánh giá nguy cơ trầm cảm."""
+        try:
+            current_time = datetime.now()
+            
+            # Kiểm tra xem có cần đánh giá mới không
+            if (self.last_assessment and 
+                current_time - self.last_assessment < self.assessment_interval):
+                # Trả về kết quả đánh giá gần nhất
+                if self.history:
+                    return (
+                        self.history[-1]['risk_score'],
+                        self.history[-1]['risk_level']
+                    )
+                return 0, "low"
+            
+            # Phân tích các chỉ số
+            emotion_patterns = self.analyze_emotion_patterns(emotion_history)
+            usage_patterns = self.analyze_usage_patterns(emotion_history)
+            interaction_patterns = self.analyze_interaction_patterns(user_preferences)
+            
+            # Nếu không có đủ dữ liệu cho bất kỳ phân tích nào
+            if not any([emotion_patterns, usage_patterns, interaction_patterns]):
+                return 0, "low"
+            
+            # Tính điểm nguy cơ
+            risk_score, risk_level = self.calculate_risk_score(
+                emotion_patterns, usage_patterns, interaction_patterns
+            )
+            
+            # Lưu kết quả đánh giá
+            assessment = {
+                'timestamp': current_time.isoformat(),
+                'risk_score': risk_score,
+                'risk_level': risk_level,
+                'metrics': {
+                    'emotion_patterns': emotion_patterns,
+                    'usage_patterns': usage_patterns,
+                    'interaction_patterns': interaction_patterns
+                }
+            }
+            
+            self.history.append(assessment)
+            self.last_assessment = current_time
+            self.save_history()
+            
+            return risk_score, risk_level
+            
+        except Exception as e:
+            logging.error(f"Error predicting risk: {e}")
+            return 0, "low"

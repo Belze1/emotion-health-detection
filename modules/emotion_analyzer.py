@@ -1,4 +1,4 @@
-"""Emotion analysis module using DeepFace."""
+"""Module phân tích cảm xúc sử dụng DeepFace."""
 
 from deepface import DeepFace
 import numpy as np
@@ -10,34 +10,34 @@ import os
 
 class EmotionAnalyzer:
     def __init__(self):
-        """Initialize the emotion analyzer."""
+        """Khởi tạo emotion analyzer."""
         self.emotions = ['happy', 'sad', 'angry', 'surprise', 'neutral']
         self.emotion_history = []
-        self.analysis_interval = 30  # Analyze every 30 frames
+        self.analysis_interval = 30  # Phân tích mỗi 30 frame
         self.frame_counter = 0
         
     def analyze_emotion(self, face_image: np.ndarray) -> Optional[Dict]:
-        """Analyze emotions in the face image.
+        """Phân tích cảm xúc từ ảnh khuôn mặt.
         
         Args:
-            face_image: Cropped face image array
+            face_image: Ảnh khuôn mặt đã được cắt
             
         Returns:
-            Dictionary containing emotion probabilities or None if analysis fails
+            Dict chứa xác suất các cảm xúc hoặc None nếu có lỗi
         """
         try:
-            # Increment frame counter
+            # Tăng bộ đếm frame
             self.frame_counter += 1
             
-            # Only analyze every nth frame
+            # Chỉ phân tích mỗi n frame
             if self.frame_counter % self.analysis_interval != 0:
                 return None
                 
-            # Ensure image is BGR (DeepFace expects BGR)
-            if len(face_image.shape) == 2:  # Convert grayscale to BGR if needed
+            # Đảm bảo ảnh ở định dạng BGR
+            if len(face_image.shape) == 2:
                 face_image = cv2.cvtColor(face_image, cv2.COLOR_GRAY2BGR)
             
-            # Analyze emotions
+            # Phân tích cảm xúc
             result = DeepFace.analyze(
                 face_image,
                 actions=['emotion'],
@@ -45,29 +45,37 @@ class EmotionAnalyzer:
                 silent=True
             )
             
-            # Extract emotion probabilities
-            emotions = {
-                emotion: result[0]['emotion'][emotion]
-                for emotion in self.emotions
-            }
+            # Trích xuất xác suất cảm xúc
+            emotions = {}
+            all_emotions = result[0]['emotion']
+            total = sum(value for emotion, value in all_emotions.items() 
+                       if emotion in self.emotions)
             
-            # Normalize probabilities
-            total = sum(emotions.values())
-            emotions = {k: v/total for k, v in emotions.items()}
+            # Chuẩn hóa xác suất cho các cảm xúc được quan tâm
+            for emotion in self.emotions:
+                if emotion in all_emotions:
+                    emotions[emotion] = all_emotions[emotion] / total
+                else:
+                    emotions[emotion] = 0.0
             
-            # Get dominant emotion
+            # Xác định cảm xúc chính
             dominant_emotion = max(emotions.items(), key=lambda x: x[1])[0]
             
-            # Store result with timestamp
+            # Lưu kết quả với timestamp
+            current_time = datetime.now()
             self.emotion_history.append({
-                'timestamp': datetime.now().isoformat(),
+                'timestamp': current_time.isoformat(),
                 'emotions': emotions,
                 'dominant_emotion': dominant_emotion
             })
             
-            # Keep only last 100 readings
+            # Giữ lại 100 kết quả gần nhất
             if len(self.emotion_history) > 100:
                 self.emotion_history.pop(0)
+            
+            # Lưu lịch sử định kỳ
+            if len(self.emotion_history) % 10 == 0:
+                self.save_history()
             
             return {
                 'emotions': emotions,
@@ -75,23 +83,23 @@ class EmotionAnalyzer:
             }
             
         except Exception as e:
-            print(f"Error analyzing emotions: {str(e)}")
+            print(f"Lỗi phân tích cảm xúc: {str(e)}")
             return None
     
     def get_emotion_stats(self, minutes: int = 5) -> Dict:
-        """Calculate emotion statistics over the last n minutes.
+        """Tính toán thống kê cảm xúc trong n phút gần nhất.
         
         Args:
-            minutes: Number of minutes to analyze
+            minutes: Số phút cần phân tích
             
         Returns:
-            Dictionary containing emotion statistics
+            Dict chứa thống kê cảm xúc
         """
         if not self.emotion_history:
             return {emotion: 0.0 for emotion in self.emotions}
             
-        # Filter readings from last n minutes
         current_time = datetime.now()
+        # Lọc dữ liệu trong khoảng thời gian chỉ định
         recent_emotions = [
             entry for entry in self.emotion_history
             if (current_time - datetime.fromisoformat(entry['timestamp'])).total_seconds() <= minutes * 60
@@ -100,7 +108,7 @@ class EmotionAnalyzer:
         if not recent_emotions:
             return {emotion: 0.0 for emotion in self.emotions}
         
-        # Calculate average probabilities
+        # Tính trung bình xác suất
         emotion_sums = {emotion: 0.0 for emotion in self.emotions}
         for entry in recent_emotions:
             for emotion, prob in entry['emotions'].items():
@@ -112,21 +120,29 @@ class EmotionAnalyzer:
         }
     
     def save_history(self, filepath: str = 'data/emotion_history.json'):
-        """Save emotion history to file.
+        """Lưu lịch sử cảm xúc ra file.
         
         Args:
-            filepath: Path to save the history file
+            filepath: Đường dẫn file lưu lịch sử
         """
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, 'w') as f:
-            json.dump(self.emotion_history, f)
+        try:
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            with open(filepath, 'w') as f:
+                json.dump(self.emotion_history, f)
+        except Exception as e:
+            print(f"Lỗi lưu lịch sử cảm xúc: {str(e)}")
     
     def load_history(self, filepath: str = 'data/emotion_history.json'):
-        """Load emotion history from file.
+        """Tải lịch sử cảm xúc từ file.
         
         Args:
-            filepath: Path to the history file
+            filepath: Đường dẫn file lịch sử
         """
-        if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
-                self.emotion_history = json.load(f)
+        try:
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    self.emotion_history = json.load(f)
+                print(f"Đã tải {len(self.emotion_history)} bản ghi lịch sử cảm xúc")
+        except Exception as e:
+            print(f"Lỗi tải lịch sử cảm xúc: {str(e)}")
+            self.emotion_history = []

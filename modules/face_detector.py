@@ -1,4 +1,4 @@
-"""Face detection module using MediaPipe."""
+"""Face detection module."""
 
 import cv2
 import mediapipe as mp
@@ -7,7 +7,7 @@ from typing import Tuple, Optional
 
 class FaceDetector:
     def __init__(self, min_detection_confidence: float = 0.5):
-        """Initialize the face detector.
+        """Initialize face detector.
         
         Args:
             min_detection_confidence: Minimum confidence value for face detection
@@ -18,8 +18,45 @@ class FaceDetector:
             min_detection_confidence=min_detection_confidence
         )
         
+    def draw_emotion_text(self, frame: np.ndarray, text: str, pos: tuple, 
+                         font_scale: float = 0.6, thickness: int = 2) -> None:
+        """Draw text with background on frame.
+        
+        Args:
+            frame: Image to draw on
+            text: Text to draw
+            pos: Position (x, y) to draw text
+            font_scale: Font scale
+            thickness: Line thickness
+        """
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        (text_width, text_height), baseline = cv2.getTextSize(
+            text, font, font_scale, thickness
+        )
+        
+        # Draw background
+        x, y = pos
+        cv2.rectangle(
+            frame,
+            (x, y - text_height - 5),
+            (x + text_width + 5, y + baseline),
+            (0, 0, 0),
+            -1
+        )
+        
+        # Draw text
+        cv2.putText(
+            frame,
+            text,
+            (x, y),
+            font,
+            font_scale,
+            (255, 255, 255),
+            thickness
+        )
+        
     def detect_faces(self, frame: np.ndarray, emotions: dict = None) -> Tuple[np.ndarray, list]:
-        """Detect faces in the frame.
+        """Detect faces in frame.
         
         Args:
             frame: Input image frame
@@ -43,7 +80,7 @@ class FaceDetector:
         
         if results.detections:
             for detection in results.detections:
-                # Get bounding box coordinates
+                # Get bounding box
                 bbox = detection.location_data.relative_bounding_box
                 x = int(bbox.xmin * frame_width)
                 y = int(bbox.ymin * frame_height)
@@ -54,7 +91,13 @@ class FaceDetector:
                 face_boxes.append((x, y, w, h))
                 
                 # Draw bounding box
-                cv2.rectangle(annotated_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.rectangle(
+                    annotated_frame,
+                    (x, y),
+                    (x + w, y + h),
+                    (0, 255, 0),
+                    2
+                )
                 
                 # Draw emotion information if available
                 if emotions:
@@ -68,36 +111,21 @@ class FaceDetector:
                     # Get top 2 emotions
                     top_emotions = sorted_emotions[:2]
                     
-                    # Draw text for each emotion
-                    y_offset = y - 35  # Start above the face box
+                    # Draw each emotion on separate lines
+                    y_offset = y - 10  # Start above face box
                     for emotion, prob in top_emotions:
                         text = f"{emotion}: {int(prob * 100)}%"
-                        # Draw text with background
-                        (text_width, text_height), _ = cv2.getTextSize(
-                            text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
-                        )
-                        cv2.rectangle(
-                            annotated_frame,
-                            (x, y_offset - text_height - 2),
-                            (x + text_width + 4, y_offset + 2),
-                            (0, 0, 0),
-                            -1
-                        )
-                        cv2.putText(
+                        self.draw_emotion_text(
                             annotated_frame,
                             text,
-                            (x + 2, y_offset),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6,
-                            (255, 255, 255),
-                            2
+                            (x, y_offset)
                         )
-                        y_offset += 25  # Move down for next emotion
+                        y_offset -= 25  # Move up for next emotion
         
         return annotated_frame, face_boxes
     
     def extract_face(self, frame: np.ndarray, face_box: tuple) -> Optional[np.ndarray]:
-        """Extract face region from frame using bounding box.
+        """Extract face region from frame.
         
         Args:
             frame: Input image frame
@@ -108,7 +136,8 @@ class FaceDetector:
         """
         try:
             x, y, w, h = face_box
-            # Add padding around face (20%)
+            
+            # Add padding (20%)
             padding = 0.2
             x_pad = int(w * padding)
             y_pad = int(h * padding)
@@ -120,8 +149,9 @@ class FaceDetector:
             
             face_region = frame[y1:y2, x1:x2]
             return face_region
+            
         except Exception as e:
-            print(f"Error extracting face: {str(e)}")
+            print(f"Lỗi trích xuất khuôn mặt: {str(e)}")
             return None
 
     def release(self):

@@ -1,199 +1,244 @@
-// Emotion Chart Configuration
-const emotions = ['happy', 'sad', 'angry', 'surprise', 'neutral'];
-const emotionColors = {
-    happy: 'rgb(75, 192, 192)',
-    sad: 'rgb(54, 162, 235)',
-    angry: 'rgb(255, 99, 132)',
-    surprise: 'rgb(255, 206, 86)',
-    neutral: 'rgb(153, 102, 255)'
+/**
+ * Xử lý biểu đồ phân tích cảm xúc và đánh giá sức khỏe tinh thần
+ */
+
+// Biến lưu trữ các biểu đồ
+let emotionTrendChart = null;
+let riskScoreChart = null;
+
+// Cấu hình chung cho biểu đồ
+const chartConfig = {
+    responsive: true,
+    maintainAspectRatio: false,  // Cho phép điều chỉnh kích thước
+    animation: {
+        duration: 1000,
+        easing: 'easeInOutQuart'
+    },
+    plugins: {
+        legend: {
+            position: 'bottom',
+            labels: {
+                boxWidth: 20,
+                padding: 20
+            }
+        },
+        tooltip: {
+            mode: 'index',
+            intersect: false,
+            padding: 10,
+            callbacks: {
+                label: function(context) {
+                    let value = context.raw;
+                    return `${context.dataset.label}: ${Math.round(value * 100)}%`;
+                }
+            }
+        }
+    },
+    scales: {
+        y: {
+            beginAtZero: true,
+            max: 1,
+            ticks: {
+                callback: value => `${Math.round(value * 100)}%`,
+                stepSize: 0.2
+            },
+            grid: {
+                color: 'rgba(0, 0, 0, 0.1)',
+                drawBorder: false
+            }
+        },
+        x: {
+            grid: {
+                display: false
+            },
+            ticks: {
+                maxRotation: 45,
+                minRotation: 45
+            }
+        }
+    }
 };
 
-// Initialize real-time emotion chart
-function initEmotionChart() {
-    const ctx = document.getElementById('emotionChart').getContext('2d');
-    return new Chart(ctx, {
+// Màu sắc cho các loại cảm xúc
+const emotionColors = {
+    happy: 'rgba(75, 192, 192, 0.8)',
+    sad: 'rgba(54, 162, 235, 0.8)',
+    angry: 'rgba(255, 99, 132, 0.8)',
+    surprise: 'rgba(255, 206, 86, 0.8)',
+    neutral: 'rgba(153, 102, 255, 0.8)'
+};
+
+// Màu sắc cho mức độ nguy cơ
+const riskColors = {
+    low: '#4caf50',
+    medium: '#ff9800',
+    high: '#f44336'
+};
+
+/**
+ * Cập nhật biểu đồ xu hướng cảm xúc
+ */
+function updateEmotionTrendChart(data) {
+    const ctx = document.getElementById('emotionTrendChart')?.getContext('2d');
+    if (!ctx) return;
+    
+    if (emotionTrendChart) {
+        emotionTrendChart.destroy();
+    }
+
+    // Format nhãn thời gian
+    const labels = data.labels.map(timestamp => {
+        const date = new Date(timestamp);
+        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+    });
+
+    emotionTrendChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: [],
-            datasets: emotions.map(emotion => ({
-                label: emotion.charAt(0).toUpperCase() + emotion.slice(1),
-                data: [],
-                borderColor: emotionColors[emotion],
-                fill: false,
-                tension: 0.4
-            }))
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Cảm xúc tiêu cực',
+                    data: data.negative_ratios,
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Độ biến thiên',
+                    data: data.variances,
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2
+                }
+            ]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                intersect: false,
-                mode: 'index'
-            },
+            ...chartConfig,
             plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 1,
-                    title: {
+                ...chartConfig.plugins,
+                title: {
                     display: true,
-                    text: 'Probability'
-                    }
-                },
-                x: {
-                    display: true,
-                    title: {
-                        display: true,
-                        text: 'Time'
-                    }
+                    text: 'Xu Hướng Cảm Xúc Theo Thời Gian',
+                    padding: 20
                 }
-            },
-            animation: {
-                duration: 500
             }
         }
     });
 }
 
-// Initialize risk timeline chart
-function initRiskChart() {
-    const ctx = document.getElementById('riskTimeline').getContext('2d');
-    return new Chart(ctx, {
+/**
+ * Cập nhật biểu đồ điểm đánh giá nguy cơ
+ */
+function updateRiskScoreChart(data) {
+    const ctx = document.getElementById('riskScoreChart')?.getContext('2d');
+    if (!ctx) return;
+    
+    if (riskScoreChart) {
+        riskScoreChart.destroy();
+    }
+
+    // Format nhãn thời gian
+    const labels = data.labels.map(timestamp => {
+        const date = new Date(timestamp);
+        return `${date.getDate()}/${date.getMonth() + 1} ${date.getHours()}:${date.getMinutes()}`;
+    });
+
+    riskScoreChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: [],
+            labels: labels,
             datasets: [{
-                label: 'Depression Risk',
-                data: [],
-                borderColor: 'rgb(255, 99, 132)',
-                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                label: 'Điểm nguy cơ',
+                data: data.risk_scores,
+                borderColor: 'rgb(255, 159, 64)',
+                backgroundColor: 'rgba(255, 159, 64, 0.1)',
                 fill: true,
-                tension: 0.4
+                tension: 0.4,
+                borderWidth: 2,
+                pointBackgroundColor: data.risk_scores.map(score => {
+                    if (score >= 0.7) return riskColors.high;
+                    if (score >= 0.4) return riskColors.medium;
+                    return riskColors.low;
+                }),
+                pointRadius: 5,
+                pointHoverRadius: 7
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                intersect: false,
-                mode: 'index'
-            },
+            ...chartConfig,
             plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 1,
-                    title: {
-                        display: true,
-                        text: 'Risk Level'
-                    }
-                },
-                x: {
+                ...chartConfig.plugins,
+                title: {
                     display: true,
-                    title: {
-                        display: true,
-                        text: 'Time'
-                    }
+                    text: 'Điểm Đánh Giá Nguy Cơ Theo Thời Gian',
+                    padding: 20
                 }
-            },
-            animation: {
-                duration: 500
             }
         }
     });
 }
 
-// Update emotion chart with new data
-function updateEmotionChart(chart, emotionData) {
-    const now = new Date().toLocaleTimeString();
+/**
+ * Cập nhật hiển thị các chỉ số
+ */
+function updateMetrics(data) {
+    // Cảm xúc
+    if (data.emotion_metrics) {
+        document.getElementById('negativeRatio').textContent = 
+            `${Math.round(data.emotion_metrics.negative_ratio * 100)}%`;
+        document.getElementById('emotionVariance').textContent = 
+            data.emotion_metrics.emotion_variance.toFixed(3);
+    }
+
+    // Thời gian sử dụng
+    if (data.usage_metrics) {
+        document.getElementById('continuousUsage').textContent = 
+            `${data.usage_metrics.max_continuous_usage.toFixed(1)} giờ`;
+        document.getElementById('lateNightUsage').textContent = 
+            `${Math.round(data.usage_metrics.late_night_ratio * 100)}%`;
+    }
+
+    // Tương tác
+    if (data.interaction_metrics) {
+        document.getElementById('dislikeRatio').textContent = 
+            `${Math.round(data.interaction_metrics.dislike_ratio * 100)}%`;
+        document.getElementById('totalInteractions').textContent = 
+            data.interaction_metrics.total_interactions;
+    }
+}
+
+/**
+ * Cập nhật kết quả đánh giá
+ */
+function updateAssessmentResult(data) {
+    const resultDiv = document.getElementById('assessmentResult');
+    if (!resultDiv) return;
+
+    let riskClass = 'success';
+    let riskText = 'Thấp';
     
-    // Add new data point
-    chart.data.labels.push(now);
-    emotions.forEach((emotion, index) => {
-        chart.data.datasets[index].data.push(emotionData[emotion]);
-    });
-    
-    // Remove old data points if more than 20
-    if (chart.data.labels.length > 20) {
-        chart.data.labels.shift();
-        chart.data.datasets.forEach(dataset => dataset.data.shift());
+    if (data.risk_level === 'medium') {
+        riskClass = 'warning';
+        riskText = 'Trung bình';
+    } else if (data.risk_level === 'high') {
+        riskClass = 'danger';
+        riskText = 'Cao';
     }
     
-    chart.update('none'); // Update without animation for smooth real-time updates
-}
+    resultDiv.innerHTML = `
+        <div class="alert alert-${riskClass} assessment-result risk-${data.risk_level}">
+            <h6>Mức độ nguy cơ: ${riskText}</h6>
+            <p>Điểm đánh giá: ${Math.round(data.risk_score * 100)}%</p>
+            <p>Thời gian: ${new Date(data.timestamp).toLocaleString()}</p>
+        </div>
+    `;
 
-// Update risk timeline with new data
-function updateRiskChart(chart, riskScore) {
-    const now = new Date().toLocaleTimeString();
-    
-    // Add new data point
-    chart.data.labels.push(now);
-    chart.data.datasets[0].data.push(riskScore);
-    
-    // Remove old data points if more than 50
-    if (chart.data.labels.length > 50) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
-    }
-    
-    chart.update('none');
-}
-
-// Format timestamps for display
-function formatTimestamp(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-}
-
-// Create emotion history visualization
-function createEmotionHistory(data, containerId) {
-    const container = document.getElementById(containerId);
-    const width = container.offsetWidth;
-    const height = 200;
-    
-    const svg = d3.select(container)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height);
-        
-    // Create stacked area chart
-    const stack = d3.stack()
-        .keys(emotions)
-        .order(d3.stackOrderNone)
-        .offset(d3.stackOffsetNone);
-        
-    const series = stack(data);
-    
-    // Create scales
-    const x = d3.scaleTime()
-        .domain(d3.extent(data, d => new Date(d.timestamp)))
-        .range([0, width]);
-        
-    const y = d3.scaleLinear()
-        .domain([0, 1])
-        .range([height, 0]);
-        
-    // Create area generator
-    const area = d3.area()
-        .x(d => x(new Date(d.data.timestamp)))
-        .y0(d => y(d[0]))
-        .y1(d => y(d[1]))
-        .curve(d3.curveBasis);
-        
-    // Add areas
-    svg.selectAll('path')
-        .data(series)
-        .enter()
-        .append('path')
-        .attr('d', area)
-        .style('fill', (d, i) => emotionColors[emotions[i]])
-        .style('opacity', 0.7);
+    // Cập nhật style cho kết quả
+    const resultBox = resultDiv.querySelector('.assessment-result');
+    resultBox.classList.add('fade-in');
 }

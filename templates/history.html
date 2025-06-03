@@ -3,98 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emotion History - Emotion Health Detection</title>
+    <title>Lịch Sử Cảm Xúc & Đánh Giá</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+
+    <style>
+        /* Chart container styles - chỉ áp dụng cho trang history */
+        .history-chart-container {
+            position: relative;
+            height: 300px !important; /* Chiều cao cố định */
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        
+        #emotionTrendChart, #riskScoreChart {
+            width: 100% !important;
+            height: 100% !important;
+        }
+    </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
         <div class="container">
-            <a class="navbar-brand" href="/">Emotion Health Detection</a>
+            <a class="navbar-brand" href="/">Phân Tích Cảm Xúc</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link active" href="/history">History</a>
+                        <a class="nav-link" href="/">Trang Chủ</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/recommendations">Gợi Ý Video</a>
                     </li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <div class="container mt-4">
-        <!-- Time Range Selection -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">Time Range</h5>
-                    </div>
-                    <div class="card-body">
-                        <select id="timeRange" class="form-select" onchange="updateCharts()">
-                            <option value="24">Last 24 Hours</option>
-                            <option value="72">Last 3 Days</option>
-                            <option value="168">Last Week</option>
-                            <option value="720">Last Month</option>
-                        </select>
+    <div class="container">
+        <!-- Thẻ điều khiển -->
+        <div class="mb-4">
+            <div class="btn-group" role="group">
+                <button class="btn btn-outline-primary active" onclick="setTimeframe('24h')">24 Giờ</button>
+                <button class="btn btn-outline-primary" onclick="setTimeframe('7d')">7 Ngày</button>
+                <button class="btn btn-outline-primary" onclick="setTimeframe('30d')">30 Ngày</button>
+            </div>
+            <button class="btn btn-primary ms-2" onclick="checkMentalHealth()">
+                Đánh Giá Ngay
+            </button>
+        </div>
+
+        <!-- Kết quả đánh giá -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Kết Quả Đánh Giá Gần Nhất</h5>
+                <div id="assessmentResult">
+                    <div class="alert alert-info">
+                        Đang tải dữ liệu...
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Emotion Trends -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">Emotion Trends</h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="emotionTrends"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Depression Risk Timeline -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">Depression Risk Timeline</h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="riskTimeline"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Session Summary Table -->
+        <!-- Biểu đồ -->
         <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">Session Summary</h5>
-                    </div>
+            <!-- Biểu đồ cảm xúc -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
                     <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>Date/Time</th>
-                                        <th>Dominant Emotion</th>
-                                        <th>Risk Score</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="sessionTable">
-                                    <!-- Session data will be populated here -->
-                                </tbody>
-                            </table>
+                        <h5 class="card-title">Xu Hướng Cảm Xúc</h5>
+                        <div class="history-chart-container">
+                            <canvas id="emotionTrendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Biểu đồ nguy cơ -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Điểm Nguy Cơ</h5>
+                        <div class="history-chart-container">
+                            <canvas id="riskScoreChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chỉ số chi tiết -->
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Cảm Xúc</h5>
+                        <div id="emotionMetrics">
+                            <p>Tỷ lệ cảm xúc tiêu cực: <span id="negativeRatio">-</span></p>
+                            <p>Độ biến thiên cảm xúc: <span id="emotionVariance">-</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Thời Gian Sử Dụng</h5>
+                        <div id="usageMetrics">
+                            <p>Thời lượng liên tục: <span id="continuousUsage">-</span></p>
+                            <p>Tỷ lệ sử dụng đêm: <span id="lateNightUsage">-</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Tương Tác</h5>
+                        <div id="interactionMetrics">
+                            <p>Tỷ lệ dislike: <span id="dislikeRatio">-</span></p>
+                            <p>Số lượt tương tác: <span id="totalInteractions">-</span></p>
                         </div>
                     </div>
                 </div>
@@ -103,101 +138,78 @@
     </div>
 
     <script>
-        // Initialize charts
-        const emotionTrends = new Chart(
-            document.getElementById('emotionTrends').getContext('2d'),
-            {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [
-                        { label: 'Happy', data: [], borderColor: 'rgb(75, 192, 192)' },
-                        { label: 'Sad', data: [], borderColor: 'rgb(54, 162, 235)' },
-                        { label: 'Angry', data: [], borderColor: 'rgb(255, 99, 132)' },
-                        { label: 'Surprise', data: [], borderColor: 'rgb(255, 206, 86)' },
-                        { label: 'Neutral', data: [], borderColor: 'rgb(153, 102, 255)' }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            max: 1
-                        }
-                    }
-                }
-            }
-        );
+        let currentTimeframe = '24h';
 
-        const riskTimeline = new Chart(
-            document.getElementById('riskTimeline').getContext('2d'),
-            {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Depression Risk',
-                        data: [],
-                        borderColor: 'rgb(255, 99, 132)',
-                        fill: true,
-                        backgroundColor: 'rgba(255, 99, 132, 0.2)'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            max: 1
-                        }
-                    }
-                }
-            }
-        );
-
-        // Function to update charts based on selected time range
-        function updateCharts() {
-            const hours = document.getElementById('timeRange').value;
+        function setTimeframe(timeframe) {
+            // Cập nhật trạng thái active của nút
+            document.querySelectorAll('.btn-group .btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
             
-            fetch(`/api/history?hours=${hours}`)
-                .then(response => response.json())
-                .then(data => {
-                    // Update emotion trends
-                    emotionTrends.data.labels = data.timestamps;
-                    data.emotions.forEach((emotion, index) => {
-                        emotionTrends.data.datasets[index].data = emotion;
-                    });
-                    emotionTrends.update();
-
-                    // Update risk timeline
-                    riskTimeline.data.labels = data.timestamps;
-                    riskTimeline.data.datasets[0].data = data.risk_scores;
-                    riskTimeline.update();
-
-                    // Update session table
-                    const sessionTable = document.getElementById('sessionTable');
-                    sessionTable.innerHTML = '';
-                    
-                    data.sessions.forEach(session => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${new Date(session.timestamp).toLocaleString()}</td>
-                            <td>${session.dominant_emotion}</td>
-                            <td>${Math.round(session.risk_score * 100)}%</td>
-                            <td>
-                                <span class="badge ${session.is_high_risk ? 'bg-danger' : 'bg-success'}">
-                                    ${session.is_high_risk ? 'High Risk' : 'Normal'}
-                                </span>
-                            </td>
-                        `;
-                        sessionTable.appendChild(row);
-                    });
-                });
+            currentTimeframe = timeframe;
+            fetchHistoryData();
         }
 
-        // Initial chart update
-        updateCharts();
+        function checkMentalHealth() {
+            document.getElementById('assessmentResult').innerHTML = 
+                '<div class="alert alert-info">Đang thực hiện đánh giá...</div>';
+                
+            fetch('/api/mental-health-check', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                updateAssessmentResult(data);
+                fetchHistoryData(); // Cập nhật biểu đồ
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('assessmentResult').innerHTML = 
+                    '<div class="alert alert-danger">Không thể thực hiện đánh giá. Vui lòng thử lại.</div>';
+            });
+        }
+
+        function fetchHistoryData() {
+            fetch(`/api/history-data?timeframe=${currentTimeframe}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Cập nhật biểu đồ
+                updateEmotionTrendChart(data.emotion_trend);
+                updateRiskScoreChart(data.risk_trend);
+                
+                // Cập nhật metrics
+                if (data.latest_metrics) {
+                    updateMetrics(data.latest_metrics);
+                }
+                
+                // Cập nhật đánh giá gần nhất
+                if (data.latest_assessment) {
+                    updateAssessmentResult(data.latest_assessment);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('assessmentResult').innerHTML = 
+                    '<div class="alert alert-danger">Không thể tải dữ liệu. Vui lòng thử lại.</div>';
+            });
+        }
+
+        // Khởi tạo trang
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load dữ liệu ban đầu
+            fetchHistoryData();
+            
+            // Thiết lập interval cập nhật
+            setInterval(fetchHistoryData, 60000); // Cập nhật mỗi phút
+        });
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

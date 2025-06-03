@@ -47,10 +47,12 @@
     </div>
 
     <script>
+        let emotionHistory = [];
         let currentEmotions = null;
         let emotionChart = null;
         let currentRecommendations = [];
         let displayedVideoIndexes = new Set();
+        let firstEmotionTime = null;
 
         const socket = io({
             transports: ['websocket'],
@@ -67,6 +69,31 @@
             'neutral': 'Bình thường'
         };
 
+        function calculateAverageEmotions(emotionEntries) {
+            if (!emotionEntries || emotionEntries.length === 0) return null;
+            
+            const avgEmotions = {
+                'happy': 0,
+                'sad': 0,
+                'angry': 0,
+                'surprise': 0,
+                'neutral': 0
+            };
+            
+            emotionEntries.forEach(entry => {
+                Object.keys(avgEmotions).forEach(emotion => {
+                    avgEmotions[emotion] += entry.emotions[emotion] || 0;
+                });
+            });
+            
+            const count = emotionEntries.length;
+            Object.keys(avgEmotions).forEach(emotion => {
+                avgEmotions[emotion] /= count;
+            });
+            
+            return avgEmotions;
+        }
+
         function updateEmotionDisplay() {
             const display = document.getElementById('emotionDisplay');
             display.innerHTML = '';
@@ -76,7 +103,6 @@
                 return;
             }
             
-            // Luôn hiển thị đủ 5 cảm xúc
             Object.entries(emotions).forEach(([key, label]) => {
                 const value = currentEmotions[key] || 0;
                 const item = document.createElement('div');
@@ -129,37 +155,65 @@
         }
 
         function fetchRecommendations() {
-            if (!currentEmotions) {
+            if (emotionHistory.length === 0 || !firstEmotionTime) {
                 document.getElementById('statusMessage').textContent = 'Đang chờ dữ liệu cảm xúc...';
                 return;
             }
 
+            document.getElementById('statusMessage').textContent = 'Đang tính toán cảm xúc trung bình...';
+            
+            const currentTime = new Date();
+            const usageDuration = (currentTime - firstEmotionTime) / (1000 * 60); // Thời gian sử dụng tính bằng phút
+            
+            let relevantEmotions;
+            if (usageDuration < 5) {
+                relevantEmotions = calculateAverageEmotions(emotionHistory);
+                console.log(`Sử dụng trung bình cảm xúc từ tất cả ${emotionHistory.length} mẫu (${usageDuration.toFixed(2)} phút)`);
+            } else {
+                const fiveMinutesAgo = new Date(currentTime - 5 * 60 * 1000);
+                const recentEmotions = emotionHistory.filter(item => item.timestamp >= fiveMinutesAgo);
+                relevantEmotions = calculateAverageEmotions(recentEmotions);
+                console.log(`Sử dụng trung bình cảm xúc từ ${recentEmotions.length} mẫu trong 5 phút gần nhất`);
+            }
+            
+            currentEmotions = relevantEmotions;
+            updateEmotionDisplay();
+            
             document.getElementById('statusMessage').textContent = 'Đang tìm kiếm video phù hợp...';
-            document.getElementById('videoContainer').innerHTML = '<div class="loading">Đang tải...</div>';
             
             fetch('/api/recommendations', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 },
                 body: JSON.stringify({ 
                     emotion_data: currentEmotions,
                     exclude_videos: Array.from(displayedVideoIndexes)
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.error) {
                     throw new Error(data.error);
                 }
+                if (!data.recommendations || data.recommendations.length === 0) {
+                    throw new Error('Không tìm thấy video phù hợp');
+                }
                 currentRecommendations = data.recommendations;
                 displayVideos();
                 document.getElementById('statusMessage').textContent = 
-                    'Video được gợi ý dựa trên tổ hợp cảm xúc hiện tại';
+                    `Video được gợi ý dựa trên cảm xúc trung bình ${usageDuration.toFixed(1)} phút`;
             })
             .catch(error => {
                 console.error('Error:', error);
-                document.getElementById('statusMessage').textContent = `Lỗi: ${error.message}`;
+                document.getElementById('statusMessage').textContent = 
+                    `Lỗi: ${error.message}`;
                 document.getElementById('videoContainer').innerHTML = 
                     '<div class="loading">Không thể tải video. Vui lòng thử lại.</div>';
             });
@@ -213,19 +267,63 @@
             return card;
         }
 
+        function sendFeedback(videoId, feedbackType, index) {
+            document.getElementById('statusMessage').textContent = 'Đang cập nhật phản hồi...';
+            
+            fetch('/api/feedback', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    video_id: videoId,
+                    feedback_type: feedbackType,
+                    emotion_data: currentEmotions
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                if (feedbackType === 'dislike') {
+                    replaceVideo(index, videoId);
+                } else {
+                    document.getElementById('statusMessage').textContent = 'Cảm ơn phản hồi của bạn!';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('statusMessage').textContent = 
+                    'Không thể cập nhật phản hồi. Vui lòng thử lại.';
+            });
+        }
+
         function replaceVideo(index, oldVideoId) {
-            // Lấy video thay thế từ server
             fetch('/api/recommendations', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 },
                 body: JSON.stringify({ 
                     emotion_data: currentEmotions,
                     exclude_videos: [...displayedVideoIndexes, oldVideoId]
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.error || !data.recommendations || data.recommendations.length === 0) {
                     throw new Error('Không tìm thấy video thay thế phù hợp');
@@ -249,39 +347,6 @@
             });
         }
 
-        function sendFeedback(videoId, feedbackType, index) {
-            document.getElementById('statusMessage').textContent = 'Đang cập nhật phản hồi...';
-            
-            fetch('/api/feedback', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    video_id: videoId,
-                    feedback_type: feedbackType,
-                    emotion_data: currentEmotions
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-
-                if (feedbackType === 'dislike') {
-                    replaceVideo(index, videoId);
-                } else {
-                    document.getElementById('statusMessage').textContent = 'Cảm ơn phản hồi của bạn!';
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                document.getElementById('statusMessage').textContent = 
-                    'Không thể cập nhật phản hồi. Vui lòng thử lại.';
-            });
-        }
-
         // Socket events
         socket.on('connect', function() {
             console.log('Socket connected');
@@ -289,23 +354,67 @@
 
         socket.on('emotion_update', function(data) {
             console.log('Received emotion update:', data);
-            currentEmotions = data.emotions;
-            localStorage.setItem('currentEmotions', JSON.stringify(currentEmotions));
-            updateEmotionDisplay();
+            
+            if (!firstEmotionTime) {
+                firstEmotionTime = new Date();
+                console.log('First emotion received at:', firstEmotionTime);
+            }
+            
+            emotionHistory.push({
+                timestamp: new Date(),
+                emotions: data.emotions
+            });
+            
+            if (emotionHistory.length > 180) { // Giữ 30 phút dữ liệu
+                emotionHistory.shift();
+            }
+            
             fetchRecommendations();
         });
 
-        // Initial setup
-        const savedEmotions = localStorage.getItem('currentEmotions');
-        if (savedEmotions) {
-            try {
-                currentEmotions = JSON.parse(savedEmotions);
-                updateEmotionDisplay();
-                fetchRecommendations();
-            } catch (e) {
-                console.error('Error parsing saved emotions:', e);
+        // Khôi phục trạng thái khi tải trang
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedFirstTime = localStorage.getItem('firstEmotionTime');
+            const savedHistory = localStorage.getItem('emotionHistory');
+
+            if (savedFirstTime && savedHistory) {
+                try {
+                    firstEmotionTime = new Date(savedFirstTime);
+                    const parsedHistory = JSON.parse(savedHistory);
+                    emotionHistory = parsedHistory.map(item => ({
+                        timestamp: new Date(item.timestamp),
+                        emotions: item.emotions
+                    }));
+                    
+                    // Chỉ giữ lại dữ liệu trong vòng 30 phút
+                    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+                    emotionHistory = emotionHistory.filter(item => item.timestamp >= thirtyMinutesAgo);
+                    
+                    console.log(`Khôi phục ${emotionHistory.length} mẫu cảm xúc từ phiên trước`);
+                    
+                    if (emotionHistory.length > 0) {
+                        fetchRecommendations();
+                    }
+                } catch (e) {
+                    console.error('Error restoring saved state:', e);
+                    emotionHistory = [];
+                    firstEmotionTime = null;
+                }
             }
-        }
+        });
+
+        // Lưu trạng thái trước khi rời trang
+        window.addEventListener('beforeunload', function() {
+            if (firstEmotionTime && emotionHistory.length > 0) {
+                localStorage.setItem('firstEmotionTime', firstEmotionTime.toISOString());
+                localStorage.setItem('emotionHistory', JSON.stringify(
+                    emotionHistory.map(item => ({
+                        timestamp: item.timestamp.toISOString(),
+                        emotions: item.emotions
+                    }))
+                ));
+            }
+        });
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

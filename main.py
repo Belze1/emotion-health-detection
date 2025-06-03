@@ -4,14 +4,15 @@ import os
 import dotenv
 dotenv.load_dotenv()
 
-from flask import Flask, render_template, Response, jsonify, request
-from flask_socketio import SocketIO, emit
+from flask import Flask, render_template, Response, jsonify, request, make_response
+from flask_socketio import SocketIO
 import cv2
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import threading
 import time
+import logging
 from modules.face_detector import FaceDetector
 from modules.emotion_analyzer import EmotionAnalyzer
 from modules.depression_predictor import DepressionPredictor
@@ -21,10 +22,58 @@ from modules.utils import (
     save_session_data
 )
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-secret-key')
 app.config['JSON_SORT_KEYS'] = False
+
+# Initialize components
+def init_components():
+    global face_detector, emotion_analyzer, depression_predictor, video_recommender
+    
+    try:
+        logger.info("Initializing face detector...")
+        face_detector = FaceDetector()
+        
+        logger.info("Initializing emotion analyzer...")
+        emotion_analyzer = EmotionAnalyzer()
+        
+        logger.info("Initializing depression predictor...")
+        depression_predictor = DepressionPredictor()
+        
+        # Initialize video recommender if API key is available
+        youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+        if youtube_api_key:
+            try:
+                logger.info("Initializing video recommender...")
+                video_recommender = VideoRecommender()
+                logger.info("Video recommender initialized successfully")
+            except Exception as e:
+                logger.error(f"Error initializing video recommender: {str(e)}")
+                video_recommender = None
+        else:
+            logger.warning("No YouTube API key found, video recommendations will be disabled")
+            video_recommender = None
+            
+        logger.info("All components initialized successfully")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error initializing components: {str(e)}")
+        return False
+
+# Global variables
+global_cap = None  # Shared webcam instance
+cap_lock = threading.Lock()
+frame_lock = threading.Lock()
+current_emotions = None
+last_risk_check = datetime.now()
+last_socket_update = 0
+risk_check_interval = int(os.getenv('RISK_CHECK_INTERVAL', 300))
+socket_update_interval = float(os.getenv('SOCKET_UPDATE_INTERVAL', 1.0))
 
 # Cấu hình SocketIO với async mode là threading và disable debug logs
 socketio = SocketIO(
@@ -35,49 +84,189 @@ socketio = SocketIO(
     engineio_logger=False
 )
 
-# Global variables
-global_cap = None  # Shared webcam instance
-cap_lock = threading.Lock()
-frame_lock = threading.Lock()
-current_emotions = None
-last_risk_check = datetime.now()
-last_socket_update = 0
-risk_check_interval = int(os.getenv('RISK_CHECK_INTERVAL', 300))
-socket_update_interval = float(os.getenv('SOCKET_UPDATE_INTERVAL', 1.0))  # Giới hạn update mỗi 1 giây
+@app.route('/')
+def index():
+    """Render main page."""
+    return render_template(
+        'index.html',
+        video_recommendations_enabled=video_recommender is not None
+    )
 
-print("Initializing components...")
+@app.route('/recommendations')
+def recommendations():
+    """Show video recommendations page."""
+    if not video_recommender:
+        return render_template('index.html', error="Video recommendations are not available")
+    return render_template(
+        'recommendations.html',
+        video_recommendations_enabled=True
+    )
 
-# Initialize components
-face_detector = FaceDetector()
-emotion_analyzer = EmotionAnalyzer()
-depression_predictor = DepressionPredictor()
+@app.route('/history')
+def history():
+    """Show emotion and mental health history page."""
+    return render_template('history.html')
 
-# Initialize video recommender if API key is available
-youtube_api_key = os.getenv('YOUTUBE_API_KEY')
-video_recommender = None
-if youtube_api_key:
+@app.route('/video_feed')
+def video_feed():
+    """Video streaming route."""
+    return Response(
+        generate_frames(),
+        mimetype='multipart/x-mixed-replace; boundary=frame'
+    )
+
+@app.route('/api/recommendations', methods=['POST'])
+def get_recommendations():
+    """API endpoint for video recommendations."""
     try:
-        print("Initializing video recommender...")
-        video_recommender = VideoRecommender()
-        print("Video recommender initialized successfully")
-    except Exception as e:
-        print(f"Error initializing video recommender: {str(e)}")
-        print("Video recommendations will be disabled")
+        if not request.is_json:
+            return make_response(jsonify({'error': 'Content-Type must be application/json'}), 400)
 
-def get_webcam():
-    """Get or initialize global webcam instance."""
-    global global_cap
-    
-    with cap_lock:
-        if global_cap is None or not global_cap.isOpened():
-            print("Initializing webcam...")
-            global_cap = init_webcam()
+        if not video_recommender:
+            return make_response(jsonify({'error': 'Video recommendations are not available'}), 503)
             
-            if global_cap is None or not global_cap.isOpened():
-                print("Could not connect to webcam")
-                return None
+        data = request.get_json()
+        emotion_data = data.get('emotion_data')
+        exclude_videos = data.get('exclude_videos', [])
+
+        if not emotion_data:
+            return make_response(jsonify({'error': 'Missing emotion_data'}), 400)
+
+        recommendations = video_recommender.get_video_recommendations(
+            emotion_data,
+            exclude_videos=exclude_videos,
+            num_recommendations=8
+        )
+
+        return jsonify({'recommendations': recommendations})
+
+    except Exception as e:
+        logger.error(f"Error getting recommendations: {str(e)}")
+        return make_response(jsonify({'error': 'Internal server error'}), 500)
+
+@app.route('/api/mental-health-check', methods=['POST'])
+def mental_health_check():
+    """Thực hiện đánh giá sức khỏe tinh thần."""
+    try:
+        risk_score, risk_level = depression_predictor.predict_risk(
+            emotion_analyzer.emotion_history,
+            video_recommender.preferences if video_recommender else None
+        )
+        
+        assessment = {
+            'timestamp': datetime.now().isoformat(),
+            'risk_score': float(risk_score),
+            'risk_level': risk_level
+        }
+        
+        return jsonify(assessment)
+    except Exception as e:
+        logger.error(f"Error performing mental health check: {str(e)}")
+        return make_response(jsonify({'error': 'Internal server error'}), 500)
+
+@app.route('/api/history-data')
+def get_history_data():
+    """Lấy dữ liệu lịch sử cho biểu đồ."""
+    try:
+        timeframe = request.args.get('timeframe', '24h')
+        
+        # Xác định thời điểm bắt đầu dựa trên timeframe
+        current_time = datetime.now()
+        if timeframe == '24h':
+            start_time = current_time - timedelta(hours=24)
+        elif timeframe == '7d':
+            start_time = current_time - timedelta(days=7)
+        elif timeframe == '30d':
+            start_time = current_time - timedelta(days=30)
+        else:
+            return make_response(jsonify({'error': 'Invalid timeframe'}), 400)
+        
+        # Lấy dữ liệu từ emotion_analyzer và depression_predictor
+        emotion_data = [
+            entry for entry in emotion_analyzer.emotion_history 
+            if datetime.fromisoformat(entry['timestamp']) >= start_time
+        ]
+        
+        assessments = [
+            assessment for assessment in depression_predictor.history
+            if datetime.fromisoformat(assessment['timestamp']) >= start_time
+        ]
+        
+        # Format dữ liệu cho biểu đồ xu hướng cảm xúc
+        emotion_trend_data = {
+            'labels': [],
+            'negative_ratios': [],
+            'variances': []
+        }
+        
+        for entry in emotion_data:
+            emotion_trend_data['labels'].append(entry['timestamp'])
+            emotions = entry['emotions']
+            negative_ratio = emotions.get('sad', 0) + emotions.get('angry', 0)
+            emotion_trend_data['negative_ratios'].append(float(negative_ratio))
+            
+            values = list(emotions.values())
+            emotion_trend_data['variances'].append(float(np.var(values)))
+        
+        # Format dữ liệu cho biểu đồ điểm nguy cơ
+        risk_trend_data = {
+            'labels': [a['timestamp'] for a in assessments],
+            'risk_scores': [float(a['risk_score']) for a in assessments]
+        }
+        
+        # Lấy đánh giá mới nhất
+        latest_assessment = assessments[-1] if assessments else None
+        
+        # Lấy metrics mới nhất
+        latest_metrics = {
+            'emotion_metrics': depression_predictor.analyze_emotion_patterns(
+                emotion_analyzer.emotion_history
+            ) or {
+                'negative_ratio': 0,
+                'emotion_variance': 0,
+                'num_records': 0
+            },
+            'usage_metrics': depression_predictor.analyze_usage_patterns(
+                emotion_analyzer.emotion_history
+            ) or {
+                'max_continuous_usage': 0,
+                'late_night_ratio': 0,
+                'num_sessions': 0
+            },
+            'interaction_metrics': depression_predictor.analyze_interaction_patterns(
+                video_recommender.preferences if video_recommender else None
+            ) or {
+                'dislike_ratio': 0,
+                'total_interactions': 0
+            }
+        }
+        
+        return jsonify({
+            'emotion_trend': emotion_trend_data,
+            'risk_trend': risk_trend_data,
+            'latest_assessment': latest_assessment,
+            'latest_metrics': latest_metrics
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting history data: {str(e)}")
+        return make_response(jsonify({'error': 'Internal server error'}), 500)
+
+def generate_frames():
+    """Generate video frames."""
+    while True:
+        with frame_lock:
+            frame = process_frame()
+            
+        if frame is not None:
+            ret, buffer = cv2.imencode('.jpg', frame)
+            if ret:
+                yield (
+                    b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
+                )
                 
-        return global_cap
+        time.sleep(0.033)  # ~30 FPS
 
 def process_frame():
     """Process a single frame from webcam."""
@@ -94,7 +283,7 @@ def process_frame():
             
         frame = resize_frame(frame)
         
-        frame_with_faces, face_boxes = face_detector.detect_faces(frame, current_emotions)
+        frame_with_faces, face_boxes = face_detector.detect_faces(frame)
         
         if face_boxes:
             largest_face = max(face_boxes, key=lambda box: box[2] * box[3])
@@ -116,18 +305,20 @@ def process_frame():
                             })
                             last_socket_update = current_time
                         except Exception as e:
-                            print(f"Error emitting emotion update: {e}")
+                            logger.error(f"Error emitting emotion update: {e}")
                     
                     # Check depression risk periodically
                     current_time = datetime.now()
                     if (current_time - last_risk_check).total_seconds() >= risk_check_interval:
-                        risk_score, is_high_risk = depression_predictor.predict_risk(
-                            emotion_analyzer.emotion_history
+                        risk_score, risk_level = depression_predictor.predict_risk(
+                            emotion_analyzer.emotion_history,
+                            video_recommender.preferences if video_recommender else None
                         )
                         
-                        if is_high_risk and video_recommender:
+                        if risk_level != 'low' and video_recommender:
                             recommendations = video_recommender.get_video_recommendations(
-                                current_emotions
+                                current_emotions,
+                                exclude_videos=[]
                             )
                             try:
                                 socketio.emit('recommendations', {
@@ -135,131 +326,48 @@ def process_frame():
                                     'risk_score': float(risk_score)
                                 })
                             except Exception as e:
-                                print(f"Error emitting recommendations: {e}")
+                                logger.error(f"Error emitting recommendations: {e}")
                             
                         last_risk_check = current_time
                         save_session_data({
                             'timestamp': current_time.isoformat(),
                             'emotions': current_emotions,
                             'risk_score': float(risk_score),
-                            'is_high_risk': bool(is_high_risk)
+                            'risk_level': risk_level
                         })
                     
         return frame_with_faces
         
     except Exception as e:
-        print(f"Error processing frame: {str(e)}")
+        logger.error(f"Error processing frame: {str(e)}")
         return None
 
-def generate_frames():
-    """Generate video frames."""
-    while True:
-        with frame_lock:
-            frame = process_frame()
+def get_webcam():
+    """Get or initialize global webcam instance."""
+    global global_cap
+    
+    with cap_lock:
+        if global_cap is None or not global_cap.isOpened():
+            logger.info("Initializing webcam...")
+            global_cap = init_webcam()
             
-        if frame is not None:
-            ret, buffer = cv2.imencode('.jpg', frame)
-            if ret:
-                yield (
-                    b'--frame\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
-                )
+            if global_cap is None or not global_cap.isOpened():
+                logger.error("Could not connect to webcam")
+                return None
                 
-        time.sleep(0.033)  # ~30 FPS
-
-@app.route('/')
-def index():
-    """Render main page."""
-    return render_template(
-        'index.html',
-        video_recommendations_enabled=video_recommender is not None
-    )
-
-@app.route('/recommendations')
-def recommendations():
-    """Show video recommendations page."""
-    if not video_recommender:
-        return render_template('index.html', error="Video recommendations are not available")
-    return render_template(
-        'recommendations.html',
-        video_recommendations_enabled=True
-    )
-
-@app.route('/video_feed')
-def video_feed():
-    """Video streaming route."""
-    return Response(
-        generate_frames(),
-        mimetype='multipart/x-mixed-replace; boundary=frame'
-    )
-
-@app.route('/history')
-def history():
-    """Show emotion history page."""
-    return render_template('history.html')
-
-@app.route('/api/recommendations', methods=['POST'])
-def get_recommendations():
-    """API endpoint for video recommendations."""
-    if not video_recommender:
-        return jsonify({
-            'error': 'Video recommendations are not available'
-        }), 503
-    
-    try:
-        data = request.json
-        emotion_data = data.get('emotion_data')
-        exclude_videos = data.get('exclude_videos', [])
-        
-        if not emotion_data:
-            return jsonify({'error': 'No emotion data provided'}), 400
-            
-        recommendations = video_recommender.get_video_recommendations(
-            emotion_data, 
-            exclude_videos=exclude_videos,
-            num_recommendations=8  # Lấy nhiều hơn để có video dự phòng
-        )
-        
-        return jsonify({'recommendations': recommendations})
-        
-    except Exception as e:
-        print(f"Error getting recommendations: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/feedback', methods=['POST'])
-def handle_feedback():
-    """Handle video recommendation feedback."""
-    if not video_recommender:
-        return jsonify({
-            'error': 'Video recommendations are not available'
-        }), 503
-    
-    try:
-        data = request.json
-        video_id = data.get('video_id')
-        feedback_type = data.get('feedback_type')
-        
-        if not video_id or not feedback_type:
-            return jsonify({'error': 'Missing required data'}), 400
-            
-        video_recommender.update_model(video_id, feedback_type)
-        return jsonify({'status': 'success'})
-        
-    except Exception as e:
-        print(f"Error handling feedback: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return global_cap
 
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection."""
     if current_emotions:
         try:
-            emit('emotion_update', {
+            socketio.emit('emotion_update', {
                 'timestamp': datetime.now().strftime('%H:%M:%S'),
                 'emotions': current_emotions
             })
         except Exception as e:
-            print(f"Error emitting initial emotions: {e}")
+            logger.error(f"Error emitting initial emotions: {e}")
 
 def cleanup():
     """Clean up resources."""
@@ -272,17 +380,30 @@ def cleanup():
 
 if __name__ == '__main__':
     try:
+        # Create required directories
         os.makedirs('data', exist_ok=True)
         os.makedirs('models', exist_ok=True)
-        
+
+        # Initialize components
+        logger.info("Starting application initialization...")
+        if not init_components():
+            logger.error("Failed to initialize components")
+            exit(1)
+
+        # Load history
         emotion_analyzer.load_history()
         
-        print("Starting application at http://localhost:5000")
+        # Start server
+        logger.info("Starting application at http://localhost:5000")
         socketio.run(
             app,
             host='0.0.0.0',
             port=5000,
-            debug=False  # Tắt debug mode để tránh các lỗi với socket
+            debug=False,
+            use_reloader=False  # Disable reloader to avoid duplicate initialization
         )
+    except Exception as e:
+        logger.error(f"Application startup error: {str(e)}")
+        raise
     finally:
         cleanup()

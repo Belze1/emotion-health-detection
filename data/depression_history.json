@@ -1,0 +1,152 @@
+{
+  "last_assessment": "2025-06-02T23:43:22.222860",
+  "assessments": [
+    {
+      "timestamp": "2025-06-02T23:43:22.222860",
+      "risk_score": 0.42957555160553706,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5455970703013489,
+          "emotion_variance": 0.29413121182476476,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 3.84898514310896,
+          "late_night_ratio": 0.25790087706671294,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.4284751696372838,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T23:43:22.222860",
+      "risk_score": 0.7668478141820214,
+      "risk_level": "high",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5374752595202579,
+          "emotion_variance": 0.12399154029165381,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 3.3681677440794773,
+          "late_night_ratio": 0.2883278128102009,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.5015412707685438,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T23:43:22.222860",
+      "risk_score": 0.3812528363186955,
+      "risk_level": "low",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5717084668689638,
+          "emotion_variance": 0.2808801371966368,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 1.6125180945912005,
+          "late_night_ratio": 0.22411164299199562,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.3421930171624627,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-30T23:43:22.222860",
+      "risk_score": 0.6822152011306046,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5909149309213245,
+          "emotion_variance": 0.2381880842390226,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 1.2019770293809309,
+          "late_night_ratio": 0.27792268255432245,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.5362329768547066,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-29T23:43:22.222860",
+      "risk_score": 0.5487627998261599,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.681820125412755,
+          "emotion_variance": 0.18386709884315078,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 1.203309215095469,
+          "late_night_ratio": 0.3677908329841215,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.45845899030562964,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-28T23:43:22.222860",
+      "risk_score": 0.5842387015680589,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5718880354359374,
+          "emotion_variance": 0.270975368716944,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 3.9158762352585352,
+          "late_night_ratio": 0.39829518716164414,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.46433083723954693,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-27T23:43:22.222860",
+      "risk_score": 0.33566854346211705,
+      "risk_level": "low",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.6023121128584747,
+          "emotion_variance": 0.12034283186322706,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 2.9911675172167653,
+          "late_night_ratio": 0.34741929702845176,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.40584534438735187,
+          "total_interactions": 50
+        }
+      }
+    }
+  ]
+}
