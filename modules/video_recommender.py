@@ -10,6 +10,7 @@ import json
 import logging
 from datetime import datetime
 from googleapiclient.discovery import build
+from .rl_agent import RL_Agent
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,12 +22,21 @@ class VideoRecommender:
         self.cache_dir = cache_dir
         self.embedding_model_name = os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
         self.video_embeddings = {}
+        self.top_k = 20  # Số lượng video được lọc bởi similarity
         
         # Tạo thư mục cache nếu chưa tồn tại
         os.makedirs(self.cache_dir, exist_ok=True)
 
-        # Tải preferences trước khi tải model
+        # Khởi tạo RL agent
+        self.rl_agent = RL_Agent()
+        
+        # Tải preferences và state
         self.preferences = self.load_preferences()
+        self.rl_agent.load_state()
+        
+        # Lưu trạng thái cảm xúc trước đó
+        self.last_emotion_state = None
+        self.last_recommendation_time = None
         
         # Khởi tạo YouTube API client
         self.api_key = os.getenv('YOUTUBE_API_KEY')
@@ -175,7 +185,7 @@ class VideoRecommender:
             return embedding / np.linalg.norm(embedding)
 
     def get_video_recommendations(self, emotions, exclude_videos=None, num_recommendations=4):
-        """Get video recommendations based on emotional state."""
+        """Get video recommendations using RL agent."""
         try:
             if len(self.video_embeddings) == 0:
                 logging.error("No video embeddings available")
@@ -186,55 +196,53 @@ class VideoRecommender:
                 return []
 
             exclude_set = set(exclude_videos) if exclude_videos else set()
+            current_time = datetime.now()
             
-            # Encode emotions
+            # Save current emotion state
+            self.last_emotion_state = emotions
+            self.last_recommendation_time = current_time
+            
+            # Phase 1: Get top-k candidates based on similarity
             query_embedding = self.encode_emotions(emotions)
+            candidates = []
             
             # Calculate similarities
-            similarities = {}
             for video_id, video_embedding in self.video_embeddings.items():
                 if video_id in exclude_set:
                     continue
-                    
                 try:
                     sim = float(1 - cosine(query_embedding, video_embedding))
                     if not np.isnan(sim):
-                        similarities[video_id] = sim
+                        candidates.append((video_id, sim))
                 except:
                     continue
                     
-            if not similarities:
-                logging.warning("No similarities calculated")
+            if not candidates:
+                logging.warning("No suitable candidates found")
                 return []
-            
-            # Apply preference adjustments
-            adjusted_similarities = {}
-            for video_id, sim in similarities.items():
-                pref = self.preferences.get(video_id, {})
-                likes = pref.get('likes', 0)
-                dislikes = pref.get('dislikes', 0)
                 
-                # Điều chỉnh điểm dựa trên lịch sử tương tác
-                if likes + dislikes > 0:
-                    like_ratio = likes / (likes + dislikes)
-                    sim = sim * (0.8 + 0.4 * like_ratio)  # Điều chỉnh ±20% dựa trên tỷ lệ like
-                
-                adjusted_similarities[video_id] = sim
+            # Get top-k most similar videos
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            top_k_videos = [vid for vid, _ in candidates[:self.top_k]]
             
-            # Get top recommendations
+            # Phase 2: Use RL agent to select final videos
+            selected_videos = self.rl_agent.select_action(top_k_videos, emotions)
+            
+            # Format recommendations
             recommendations = []
-            for video_id, sim in sorted(adjusted_similarities.items(), key=lambda x: x[1], reverse=True)[:num_recommendations]:
+            video_sims = dict(candidates)
+            for video_id in selected_videos:
                 try:
                     video_data = self.df[self.df['video_id'] == video_id].iloc[0]
                     recommendations.append({
-                        'video_id': str(video_data['video_id']),
+                        'video_id': str(video_id),
                         'title': str(video_data['title']),
-                        'similarity': float(sim)
+                        'similarity': float(video_sims.get(video_id, 0))
                     })
                 except Exception as e:
                     logging.error(f"Error processing video {video_id}: {str(e)}")
                     continue
-                    
+            
             logging.info(f"Found {len(recommendations)} recommendations")
             return recommendations
             
@@ -242,23 +250,61 @@ class VideoRecommender:
             logging.error(f"Error getting recommendations: {str(e)}")
             return []
             
-    def update_model(self, video_id, feedback_type):
-        """Update user preferences based on feedback."""
+    def update_model(self, video_id, feedback_type, emotion_data=None):
+        """Update RL agent based on feedback."""
         try:
+            # Calculate watch duration
+            current_time = datetime.now()
+            if self.last_recommendation_time:
+                watch_duration = (current_time - self.last_recommendation_time).total_seconds()
+            else:
+                watch_duration = 0
+                
+            # Get emotion states
+            emotion_before = self.last_emotion_state or {}
+            emotion_after = emotion_data or {}
+            
+            # Calculate reward using RL agent
+            reward = self.rl_agent.calculate_reward(
+                feedback_type,
+                watch_duration,
+                emotion_before,
+                emotion_after
+            )
+            
+            # Update RL agent
+            self.rl_agent.update(
+                video_id,
+                emotion_before,
+                emotion_after,
+                reward
+            )
+            
+            # Save state to preferences
+            self.rl_agent.save_state(
+                video_id,
+                emotion_after,
+                watch_duration,
+                reward
+            )
+            
+            # Update basic preferences (for backward compatibility)
             if video_id not in self.preferences:
                 self.preferences[video_id] = {
                     'likes': 0,
                     'dislikes': 0,
                     'last_updated': None
                 }
-            
+                
             pref = self.preferences[video_id]
             if feedback_type == 'like':
                 pref['likes'] += 1
             else:
                 pref['dislikes'] += 1
                 
-            pref['last_updated'] = datetime.now().isoformat()
+            pref['last_updated'] = current_time.isoformat()
+            
+            # Save updated preferences
             self.save_preferences()
             
         except Exception as e:

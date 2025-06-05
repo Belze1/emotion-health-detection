@@ -37,7 +37,11 @@
         <div class="emotion-state">
             <h5>Trạng Thái Cảm Xúc Hiện Tại:</h5>
             <div class="emotion-display" id="emotionDisplay"></div>
-            <div class="emotion-description mt-2" id="emotionDescription"></div>
+        </div>
+
+        <div class="emotion-state mt-4">
+            <h5>Trạng Thái Cảm Xúc Trung Bình (5 phút gần nhất):</h5>
+            <div class="emotion-display" id="averageEmotionDisplay"></div>
             <canvas id="emotionPieChart" width="200" height="200"></canvas>
         </div>
         
@@ -47,12 +51,285 @@
     </div>
 
     <script>
-        let emotionHistory = [];
-        let currentEmotions = null;
-        let emotionChart = null;
+        const DEBUG = true;
+        
+        function debugLog(message, data) {
+            if (DEBUG) {
+                console.log(`[${new Date().toISOString()}] ${message}`, data);
+            }
+        }
+
+        // Thêm style cho cảnh báo
+        const warningStyle = `
+            <style>
+                .warning-message {
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background-color: #ff4444;
+                    color: white;
+                    padding: 15px 30px;
+                    border-radius: 5px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                    z-index: 1000;
+                    display: none;
+                    animation: slideIn 0.5s ease-out;
+                }
+
+                @keyframes slideIn {
+                    from { top: -100px; }
+                    to { top: 20px; }
+                }
+            </style>
+        `;
+        document.head.insertAdjacentHTML('beforeend', warningStyle);
+
+        // Thêm div cho cảnh báo
+        const warningDiv = document.createElement('div');
+        warningDiv.className = 'warning-message';
+        warningDiv.id = 'warningMessage';
+        warningDiv.innerHTML = 'Cảnh báo: Bạn đang có cảm xúc tiêu cực kéo dài!';
+        document.body.appendChild(warningDiv);
+
+        const EmotionState = {
+            current: {
+                data: null,
+                timestamp: null,
+                display: null,
+                negativeStartTime: null,
+                warningShown: false,
+                
+                init: function() {
+                    this.display = document.getElementById('emotionDisplay');
+                },
+
+                checkNegativeEmotions: function() {
+                    if (!this.data) return false;
+                    
+                    const negativeThreshold = 0.5; // Ngưỡng cảm xúc tiêu cực
+                    const isNegative = (this.data.sad || 0) + (this.data.angry || 0) > negativeThreshold;
+                    
+                    const now = new Date().getTime();
+                    
+                    if (isNegative) {
+                        if (!this.negativeStartTime) {
+                            this.negativeStartTime = now;
+                        } else if (now - this.negativeStartTime > 20000 && !this.warningShown) { // 20 seconds
+                            document.getElementById('warningMessage').style.display = 'block';
+                            this.warningShown = true;
+                        }
+                    } else {
+                        this.negativeStartTime = null;
+                        this.warningShown = false;
+                        document.getElementById('warningMessage').style.display = 'none';
+                    }
+                },
+                update: function(emotions) {
+                    this.data = emotions;
+                    this.timestamp = new Date().getTime();
+                    this.render();
+                    this.checkNegativeEmotions();
+                    debugLog('Current emotion updated:', this.data);
+                },
+                render: function() {
+                    this.display.innerHTML = '';
+                    if (!this.data) {
+                        this.display.innerHTML = '<div class="emotion-item neutral">Chưa có dữ liệu</div>';
+                        return;
+                    }
+                    emotions.forEach(emotion => {
+                        const value = this.data[emotion] || 0;
+                        const item = document.createElement('div');
+                        item.className = `emotion-item ${emotion}`;
+                        item.textContent = `${emotion}: ${Math.round(value * 100)}%`;
+                        this.display.appendChild(item);
+                    });
+                }
+            },
+            
+            average: {
+                data: null,
+                history: [],
+                display: null,
+                chart: null,
+                maxTime: 5 * 60 * 1000, // 5 phút
+                
+                init: function() {
+                    this.display = document.getElementById('averageEmotionDisplay');
+                    this.loadHistory();
+                },
+                
+                loadHistory: function() {
+                    try {
+                        const saved = localStorage.getItem('emotionHistory');
+                        if (saved) {
+                            this.history = JSON.parse(saved);
+                            this.cleanup();
+                            this.calculate();
+                            this.render();
+                        }
+                    } catch (error) {
+                        console.error('Error loading history:', error);
+                    }
+                },
+                
+                addRecord: function(emotions) {
+                    const now = new Date().getTime();
+                    this.history.push({
+                        timestamp: now,
+                        emotions: {...emotions}
+                    });
+                    
+                    this.cleanup();
+                    this.save();
+                    this.calculate();
+                    this.render();
+                    
+                    debugLog('Average state updated:', {
+                        historyLength: this.history.length,
+                        latest: this.data
+                    });
+                },
+                
+                cleanup: function() {
+                    const now = new Date().getTime();
+                    this.history = this.history.filter(
+                        entry => now - entry.timestamp <= this.maxTime
+                    );
+                },
+                
+                calculate: function() {
+                    if (this.history.length === 0) {
+                        this.data = null;
+                        return;
+                    }
+                    
+                    const sum = {
+                        happy: 0, sad: 0, angry: 0, surprise: 0, neutral: 0
+                    };
+                    
+                    this.history.forEach(entry => {
+                        Object.keys(sum).forEach(emotion => {
+                            sum[emotion] += entry.emotions[emotion] || 0;
+                        });
+                    });
+                    
+                    this.data = {};
+                    Object.keys(sum).forEach(emotion => {
+                        this.data[emotion] = sum[emotion] / this.history.length;
+                    });
+                },
+                
+                save: function() {
+                    try {
+                        localStorage.setItem('emotionHistory', JSON.stringify(this.history));
+                    } catch (error) {
+                        console.error('Error saving history:', error);
+                    }
+                },
+                
+                render: function() {
+                    this.display.innerHTML = '';
+                    if (!this.data) {
+                        this.display.innerHTML = '<div class="emotion-item neutral">Chưa đủ dữ liệu</div>';
+                        return;
+                    }
+                    
+                    emotions.forEach(emotion => {
+                        const value = this.data[emotion] || 0;
+                        const item = document.createElement('div');
+                        item.className = `emotion-item ${emotion}`;
+                        item.textContent = `${emotion}: ${Math.round(value * 100)}%`;
+                        this.display.appendChild(item);
+                    });
+                    
+                    this.updateChart();
+                },
+                
+                updateChart: function() {
+                    const ctx = document.getElementById('emotionPieChart').getContext('2d');
+                    if (this.chart) {
+                        this.chart.destroy();
+                    }
+                    
+                    if (!this.data) return;
+                    
+                    const colors = {
+                        'happy': 'rgba(75, 192, 192, 0.8)',
+                        'sad': 'rgba(54, 162, 235, 0.8)',
+                        'angry': 'rgba(255, 99, 132, 0.8)',
+                        'surprise': 'rgba(255, 206, 86, 0.8)',
+                        'neutral': 'rgba(153, 102, 255, 0.8)'
+                    };
+                    
+                    const data = emotions.map(emotion => ({
+                        key: emotion,
+                        value: this.data[emotion] || 0
+                    }));
+                    
+                    this.chart = new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: data.map(d => d.key),
+                            datasets: [{
+                                data: data.map(d => d.value * 100),
+                                backgroundColor: data.map(d => colors[d.key])
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    position: 'right'
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        };
+
         let currentRecommendations = [];
         let displayedVideoIndexes = new Set();
-        let firstEmotionTime = null;
+        
+        // Khôi phục emotionHistory từ localStorage
+        try {
+            const savedHistory = localStorage.getItem('emotionHistory');
+            if (savedHistory) {
+                const parsedHistory = JSON.parse(savedHistory);
+                
+                // Validate và lọc dữ liệu
+                const now = new Date().getTime();
+                const cutoffTime = now - MAX_EMOTION_TIME;
+                
+                emotionHistory = parsedHistory.filter(entry => {
+                    return entry.timestamp &&
+                           typeof entry.timestamp === 'number' &&
+                           entry.timestamp >= cutoffTime &&
+                           entry.timestamp <= now;
+                });
+                
+                // Sắp xếp theo thời gian
+                emotionHistory.sort((a, b) => a.timestamp - b.timestamp);
+                
+                debugLog('Loaded emotion history:', emotionHistory);
+            }
+        } catch (error) {
+            console.error('Error loading emotion history:', error);
+            emotionHistory = [];
+        }
+        
+        // Lấy hoặc khởi tạo thời điểm bắt đầu từ localStorage
+        let appStartTime;
+        if (!localStorage.getItem('appStartTime')) {
+            appStartTime = new Date();
+            localStorage.setItem('appStartTime', appStartTime.getTime());
+        } else {
+            appStartTime = new Date(parseInt(localStorage.getItem('appStartTime')));
+        }
+        
+        const MAX_EMOTION_TIME = 5 * 60 * 1000; // 5 phút in milliseconds
 
         const socket = io({
             transports: ['websocket'],
@@ -61,60 +338,100 @@
             reconnectionAttempts: 5
         });
 
-        const emotions = {
-            'happy': 'Vui vẻ',
-            'sad': 'Buồn',
-            'angry': 'Giận dữ',
-            'surprise': 'Ngạc nhiên',
-            'neutral': 'Bình thường'
-        };
+        const emotions = ['happy', 'sad', 'angry', 'surprise', 'neutral'];
 
         function calculateAverageEmotions(emotionEntries) {
-            if (!emotionEntries || emotionEntries.length === 0) return null;
-            
-            const avgEmotions = {
-                'happy': 0,
-                'sad': 0,
-                'angry': 0,
-                'surprise': 0,
-                'neutral': 0
+            // Debug log số lượng bản ghi
+            debugLog('Total entries:', emotionEntries.length);
+
+            // Khởi tạo object tổng
+            const sum = {
+                happy: 0,
+                sad: 0,
+                angry: 0,
+                surprise: 0,
+                neutral: 0
             };
             
+            let count = 0;
+
+            // Đơn giản chỉ cộng tất cả giá trị
             emotionEntries.forEach(entry => {
-                Object.keys(avgEmotions).forEach(emotion => {
-                    avgEmotions[emotion] += entry.emotions[emotion] || 0;
-                });
+                if (entry.emotions) {
+                    count++;
+                    Object.keys(sum).forEach(emotion => {
+                        sum[emotion] += entry.emotions[emotion] || 0;
+                    });
+                    // Debug log từng entry
+                    debugLog(`Entry ${count}:`, entry.emotions);
+                }
             });
-            
-            const count = emotionEntries.length;
-            Object.keys(avgEmotions).forEach(emotion => {
-                avgEmotions[emotion] /= count;
+
+            // Debug log tổng
+            debugLog('Sum before average:', sum);
+            debugLog('Count:', count);
+
+            // Nếu không có dữ liệu hợp lệ
+            if (count === 0) {
+                return null;
+            }
+
+            // Tính trung bình đơn giản
+            const result = {};
+            Object.keys(sum).forEach(emotion => {
+                result[emotion] = sum[emotion] / count;
             });
-            
-            return avgEmotions;
+
+            // Debug log kết quả
+            debugLog('Final average:', result);
+
+            return result;
         }
 
-        function updateEmotionDisplay() {
+        function updateCurrentEmotionDisplay(currentData) {
             const display = document.getElementById('emotionDisplay');
             display.innerHTML = '';
             
-            if (!currentEmotions) {
-                display.innerHTML = '<div class="emotion-item neutral">Chưa có dữ liệu cảm xúc</div>';
+            if (!currentData || Object.keys(currentData).length === 0) {
+                display.innerHTML = '<div class="emotion-item neutral">Chưa có dữ liệu cảm xúc hiện tại</div>';
                 return;
             }
             
-            Object.entries(emotions).forEach(([key, label]) => {
-                const value = currentEmotions[key] || 0;
+            emotions.forEach(emotion => {
+                const value = currentData[emotion] || 0;
                 const item = document.createElement('div');
-                item.className = `emotion-item ${key}`;
-                item.textContent = `${label}: ${Math.round(value * 100)}%`;
+                item.className = `emotion-item ${emotion}`;
+                item.textContent = `${emotion}: ${Math.round(value * 100)}%`;
                 display.appendChild(item);
             });
 
-            updateEmotionChart();
+            debugLog('Updated current emotion display:', currentData);
         }
 
-        function updateEmotionChart() {
+        function updateAverageEmotionDisplay(averageData) {
+            const avgDisplay = document.getElementById('averageEmotionDisplay');
+            avgDisplay.innerHTML = '';
+            
+            if (!averageData || Object.keys(averageData).length === 0) {
+                avgDisplay.innerHTML = '<div class="emotion-item neutral">Chưa đủ dữ liệu cảm xúc trung bình</div>';
+                return;
+            }
+            
+            emotions.forEach(emotion => {
+                const value = averageData[emotion] || 0;
+                const item = document.createElement('div');
+                item.className = `emotion-item ${emotion}`;
+                item.textContent = `${emotion}: ${Math.round(value * 100)}%`;
+                avgDisplay.appendChild(item);
+            });
+            
+            // Chỉ cập nhật biểu đồ cho cảm xúc trung bình
+            updateEmotionChart(averageData);
+
+            debugLog('Updated average emotion display:', averageData);
+        }
+
+        function updateEmotionChart(emotionData) {
             const ctx = document.getElementById('emotionPieChart').getContext('2d');
             
             if (emotionChart) {
@@ -129,15 +446,15 @@
                 'neutral': 'rgba(153, 102, 255, 0.8)'
             };
 
-            const data = Object.entries(emotions).map(([key]) => ({
-                key: key,
-                value: (currentEmotions && currentEmotions[key]) || 0
+            const data = emotions.map(emotion => ({
+                key: emotion,
+                value: (emotionData && emotionData[emotion]) || 0
             }));
 
             emotionChart = new Chart(ctx, {
                 type: 'pie',
                 data: {
-                    labels: data.map(d => emotions[d.key]),
+                    labels: data.map(d => d.key),
                     datasets: [{
                         data: data.map(d => d.value * 100),
                         backgroundColor: data.map(d => colors[d.key])
@@ -154,41 +471,21 @@
             });
         }
 
-        function fetchRecommendations() {
-            if (emotionHistory.length === 0 || !firstEmotionTime) {
-                document.getElementById('statusMessage').textContent = 'Đang chờ dữ liệu cảm xúc...';
+        function fetchRecommendationsOnly() {
+            if (!EmotionState.average.data) {
+                document.getElementById('statusMessage').textContent = 'Chưa đủ dữ liệu cảm xúc...';
                 return;
             }
 
-            document.getElementById('statusMessage').textContent = 'Đang tính toán cảm xúc trung bình...';
-            
-            const currentTime = new Date();
-            const usageDuration = (currentTime - firstEmotionTime) / (1000 * 60); // Thời gian sử dụng tính bằng phút
-            
-            let relevantEmotions;
-            if (usageDuration < 5) {
-                relevantEmotions = calculateAverageEmotions(emotionHistory);
-                console.log(`Sử dụng trung bình cảm xúc từ tất cả ${emotionHistory.length} mẫu (${usageDuration.toFixed(2)} phút)`);
-            } else {
-                const fiveMinutesAgo = new Date(currentTime - 5 * 60 * 1000);
-                const recentEmotions = emotionHistory.filter(item => item.timestamp >= fiveMinutesAgo);
-                relevantEmotions = calculateAverageEmotions(recentEmotions);
-                console.log(`Sử dụng trung bình cảm xúc từ ${recentEmotions.length} mẫu trong 5 phút gần nhất`);
-            }
-            
-            currentEmotions = relevantEmotions;
-            updateEmotionDisplay();
-            
             document.getElementById('statusMessage').textContent = 'Đang tìm kiếm video phù hợp...';
             
             fetch('/api/recommendations', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ 
-                    emotion_data: currentEmotions,
+                body: JSON.stringify({
+                    emotion_data: EmotionState.average.data,
                     exclude_videos: Array.from(displayedVideoIndexes)
                 })
             })
@@ -207,16 +504,37 @@
                 }
                 currentRecommendations = data.recommendations;
                 displayVideos();
-                document.getElementById('statusMessage').textContent = 
+
+                // Tính thời gian sử dụng từ lúc bắt đầu phiên
+                const currentTime = new Date();
+                let usageDuration = Math.min((currentTime - appStartTime) / (1000 * 60), 5);
+                document.getElementById('statusMessage').textContent =
                     `Video được gợi ý dựa trên cảm xúc trung bình ${usageDuration.toFixed(1)} phút`;
             })
             .catch(error => {
                 console.error('Error:', error);
-                document.getElementById('statusMessage').textContent = 
+                document.getElementById('statusMessage').textContent =
                     `Lỗi: ${error.message}`;
-                document.getElementById('videoContainer').innerHTML = 
+                document.getElementById('videoContainer').innerHTML =
                     '<div class="loading">Không thể tải video. Vui lòng thử lại.</div>';
             });
+        }
+
+        // Wrapper function for backward compatibility
+        function fetchRecommendations() {
+            const validEmotions = emotionHistory.filter(entry => {
+                const timeDiff = new Date().getTime() - entry.timestamp;
+                return timeDiff <= MAX_EMOTION_TIME;
+            });
+
+            if (validEmotions.length === 0) {
+                document.getElementById('statusMessage').textContent = 'Chưa đủ dữ liệu cảm xúc...';
+                return;
+            }
+
+            averageEmotions = calculateAverageEmotions(validEmotions);
+            updateAverageEmotionDisplay(averageEmotions);
+            fetchRecommendationsOnly();
         }
 
         function displayVideos() {
@@ -235,7 +553,7 @@
             });
         }
 
-        function createVideoCard(video, index) {
+        function createVideoCard(video, index, disableFeedback = false) {
             const card = document.createElement('div');
             card.className = 'video-card';
             card.id = `video-${index}`;
@@ -243,7 +561,7 @@
             const similarity = Math.round(video.similarity * 100);
             
             card.innerHTML = `
-                <iframe 
+                <iframe
                     class="video-frame"
                     src="https://www.youtube.com/embed/${video.video_id}"
                     frameborder="0"
@@ -253,13 +571,15 @@
                 <div class="video-info">
                     <div class="video-title">${video.title}</div>
                     <div class="similarity-score">Độ phù hợp: ${similarity}%</div>
-                    <div class="feedback-buttons">
-                        <button class="feedback-button like-button" onclick="sendFeedback('${video.video_id}', 'like', ${index})">
-                            👍 Thích
-                        </button>
-                        <button class="feedback-button dislike-button" onclick="sendFeedback('${video.video_id}', 'dislike', ${index})">
-                            👎 Không thích
-                        </button>
+                    <div class="feedback-buttons" id="feedback-${video.video_id}">
+                        ${!disableFeedback ? `
+                            <button class="feedback-button like-button" onclick="sendFeedback('${video.video_id}', 'like', ${index})">
+                                👍 Thích
+                            </button>
+                            <button class="feedback-button dislike-button" onclick="sendFeedback('${video.video_id}', 'dislike', ${index})">
+                                👎 Không thích
+                            </button>
+                        ` : '<div class="feedback-message">Đã ghi nhận phản hồi của bạn</div>'}
                     </div>
                 </div>
             `;
@@ -268,6 +588,11 @@
         }
 
         function sendFeedback(videoId, feedbackType, index) {
+            // Disable feedback buttons immediately
+            const feedbackContainer = document.getElementById(`feedback-${videoId}`);
+            if (feedbackContainer) {
+                feedbackContainer.innerHTML = '<div class="feedback-message">Đã ghi nhận phản hồi của bạn</div>';
+            }
             document.getElementById('statusMessage').textContent = 'Đang cập nhật phản hồi...';
             
             fetch('/api/feedback', {
@@ -279,7 +604,7 @@
                 body: JSON.stringify({
                     video_id: videoId,
                     feedback_type: feedbackType,
-                    emotion_data: currentEmotions
+                    emotion_data: EmotionState.average.data || {}
                 })
             })
             .then(response => {
@@ -313,8 +638,8 @@
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({ 
-                    emotion_data: currentEmotions,
+                body: JSON.stringify({
+                    emotion_data: EmotionState.average.data,
                     exclude_videos: [...displayedVideoIndexes, oldVideoId]
                 })
             })
@@ -352,68 +677,66 @@
             console.log('Socket connected');
         });
 
-        socket.on('emotion_update', function(data) {
-            console.log('Received emotion update:', data);
+        function calculateAndUpdateEmotions() {
+            const now = new Date().getTime();
+            const cutoffTime = now - MAX_EMOTION_TIME;
             
-            if (!firstEmotionTime) {
-                firstEmotionTime = new Date();
-                console.log('First emotion received at:', firstEmotionTime);
-            }
-            
-            emotionHistory.push({
-                timestamp: new Date(),
-                emotions: data.emotions
+            // Lọc và validate dữ liệu
+            const validEmotions = emotionHistory.filter(entry => {
+                return entry.timestamp &&
+                       typeof entry.timestamp === 'number' &&
+                       entry.timestamp >= cutoffTime &&
+                       entry.timestamp <= now;
             });
+
+            debugLog(`Valid emotions in last 5 minutes: ${validEmotions.length}`, validEmotions);
             
-            if (emotionHistory.length > 180) { // Giữ 30 phút dữ liệu
-                emotionHistory.shift();
+            if (validEmotions.length === 0) {
+                averageEmotions = null;
+            } else {
+                // Tính weighted average dựa trên thời gian
+                const weights = validEmotions.map(entry => {
+                    const age = (now - entry.timestamp) / MAX_EMOTION_TIME;
+                    return 1 - (age * 0.5); // Cảm xúc gần đây có trọng số cao hơn
+                });
+                
+                const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+                
+                averageEmotions = {
+                    happy: 0, sad: 0, angry: 0, surprise: 0, neutral: 0
+                };
+                
+                validEmotions.forEach((entry, i) => {
+                    const weight = weights[i] / totalWeight;
+                    Object.keys(entry.emotions).forEach(emotion => {
+                        averageEmotions[emotion] += entry.emotions[emotion] * weight;
+                    });
+                });
+
+                debugLog('Calculated average emotions:', averageEmotions);
             }
             
-            fetchRecommendations();
+            updateEmotionDisplay(currentEmotions, averageEmotions);
+        }
+
+        socket.on('emotion_update', function(data) {
+            debugLog('Emotion update received:', data);
+            
+            // Cập nhật trạng thái hiện tại ngay lập tức
+            EmotionState.current.update(data.emotions);
+            
+            // Thêm vào history và tính trung bình
+            EmotionState.average.addRecord(data.emotions);
+            
+            // Gọi recommendations
+            fetchRecommendationsOnly();
         });
 
-        // Khôi phục trạng thái khi tải trang
+        // Khởi tạo trang
         document.addEventListener('DOMContentLoaded', function() {
-            const savedFirstTime = localStorage.getItem('firstEmotionTime');
-            const savedHistory = localStorage.getItem('emotionHistory');
-
-            if (savedFirstTime && savedHistory) {
-                try {
-                    firstEmotionTime = new Date(savedFirstTime);
-                    const parsedHistory = JSON.parse(savedHistory);
-                    emotionHistory = parsedHistory.map(item => ({
-                        timestamp: new Date(item.timestamp),
-                        emotions: item.emotions
-                    }));
-                    
-                    // Chỉ giữ lại dữ liệu trong vòng 30 phút
-                    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-                    emotionHistory = emotionHistory.filter(item => item.timestamp >= thirtyMinutesAgo);
-                    
-                    console.log(`Khôi phục ${emotionHistory.length} mẫu cảm xúc từ phiên trước`);
-                    
-                    if (emotionHistory.length > 0) {
-                        fetchRecommendations();
-                    }
-                } catch (e) {
-                    console.error('Error restoring saved state:', e);
-                    emotionHistory = [];
-                    firstEmotionTime = null;
-                }
-            }
-        });
-
-        // Lưu trạng thái trước khi rời trang
-        window.addEventListener('beforeunload', function() {
-            if (firstEmotionTime && emotionHistory.length > 0) {
-                localStorage.setItem('firstEmotionTime', firstEmotionTime.toISOString());
-                localStorage.setItem('emotionHistory', JSON.stringify(
-                    emotionHistory.map(item => ({
-                        timestamp: item.timestamp.toISOString(),
-                        emotions: item.emotions
-                    }))
-                ));
-            }
+            // Khởi tạo EmotionState
+            EmotionState.current.init();
+            EmotionState.average.init();
         });
     </script>
 

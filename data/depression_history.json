@@ -1,107 +1,23 @@
 {
-  "last_assessment": "2025-06-02T23:43:22.222860",
+  "last_assessment": "2025-06-05T23:03:17.653525",
   "assessments": [
     {
-      "timestamp": "2025-06-02T23:43:22.222860",
-      "risk_score": 0.42957555160553706,
-      "risk_level": "medium",
-      "metrics": {
-        "emotion_patterns": {
-          "negative_ratio": 0.5455970703013489,
-          "emotion_variance": 0.29413121182476476,
-          "num_records": 100
-        },
-        "usage_patterns": {
-          "max_continuous_usage": 3.84898514310896,
-          "late_night_ratio": 0.25790087706671294,
-          "num_sessions": 20
-        },
-        "interaction_patterns": {
-          "dislike_ratio": 0.4284751696372838,
-          "total_interactions": 50
-        }
-      }
-    },
-    {
-      "timestamp": "2025-06-01T23:43:22.222860",
-      "risk_score": 0.7668478141820214,
-      "risk_level": "high",
-      "metrics": {
-        "emotion_patterns": {
-          "negative_ratio": 0.5374752595202579,
-          "emotion_variance": 0.12399154029165381,
-          "num_records": 100
-        },
-        "usage_patterns": {
-          "max_continuous_usage": 3.3681677440794773,
-          "late_night_ratio": 0.2883278128102009,
-          "num_sessions": 20
-        },
-        "interaction_patterns": {
-          "dislike_ratio": 0.5015412707685438,
-          "total_interactions": 50
-        }
-      }
-    },
-    {
-      "timestamp": "2025-05-31T23:43:22.222860",
-      "risk_score": 0.3812528363186955,
+      "timestamp": "2025-05-27T23:43:22.222860",
+      "risk_score": 0.33566854346211705,
       "risk_level": "low",
       "metrics": {
         "emotion_patterns": {
-          "negative_ratio": 0.5717084668689638,
-          "emotion_variance": 0.2808801371966368,
+          "negative_ratio": 0.6023121128584747,
+          "emotion_variance": 0.12034283186322706,
           "num_records": 100
         },
         "usage_patterns": {
-          "max_continuous_usage": 1.6125180945912005,
-          "late_night_ratio": 0.22411164299199562,
+          "max_continuous_usage": 2.9911675172167653,
+          "late_night_ratio": 0.34741929702845176,
           "num_sessions": 20
         },
         "interaction_patterns": {
-          "dislike_ratio": 0.3421930171624627,
-          "total_interactions": 50
-        }
-      }
-    },
-    {
-      "timestamp": "2025-05-30T23:43:22.222860",
-      "risk_score": 0.6822152011306046,
-      "risk_level": "medium",
-      "metrics": {
-        "emotion_patterns": {
-          "negative_ratio": 0.5909149309213245,
-          "emotion_variance": 0.2381880842390226,
-          "num_records": 100
-        },
-        "usage_patterns": {
-          "max_continuous_usage": 1.2019770293809309,
-          "late_night_ratio": 0.27792268255432245,
-          "num_sessions": 20
-        },
-        "interaction_patterns": {
-          "dislike_ratio": 0.5362329768547066,
-          "total_interactions": 50
-        }
-      }
-    },
-    {
-      "timestamp": "2025-05-29T23:43:22.222860",
-      "risk_score": 0.5487627998261599,
-      "risk_level": "medium",
-      "metrics": {
-        "emotion_patterns": {
-          "negative_ratio": 0.681820125412755,
-          "emotion_variance": 0.18386709884315078,
-          "num_records": 100
-        },
-        "usage_patterns": {
-          "max_continuous_usage": 1.203309215095469,
-          "late_night_ratio": 0.3677908329841215,
-          "num_sessions": 20
-        },
-        "interaction_patterns": {
-          "dislike_ratio": 0.45845899030562964,
+          "dislike_ratio": 0.40584534438735187,
           "total_interactions": 50
         }
       }
@@ -128,23 +44,548 @@
       }
     },
     {
-      "timestamp": "2025-05-27T23:43:22.222860",
-      "risk_score": 0.33566854346211705,
-      "risk_level": "low",
+      "timestamp": "2025-05-29T23:43:22.222860",
+      "risk_score": 0.5487627998261599,
+      "risk_level": "medium",
       "metrics": {
         "emotion_patterns": {
-          "negative_ratio": 0.6023121128584747,
-          "emotion_variance": 0.12034283186322706,
+          "negative_ratio": 0.681820125412755,
+          "emotion_variance": 0.18386709884315078,
           "num_records": 100
         },
         "usage_patterns": {
-          "max_continuous_usage": 2.9911675172167653,
-          "late_night_ratio": 0.34741929702845176,
+          "max_continuous_usage": 1.203309215095469,
+          "late_night_ratio": 0.3677908329841215,
           "num_sessions": 20
         },
         "interaction_patterns": {
-          "dislike_ratio": 0.40584534438735187,
+          "dislike_ratio": 0.45845899030562964,
           "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-30T19:51:22.027584",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.08135092578298914,
+          "emotion_variance": 0.13006994413645154,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-30T20:29:06.426464",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.15063077794583424,
+          "emotion_variance": 0.03874245286053228,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-30T23:43:22.222860",
+      "risk_score": 0.6822152011306046,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5909149309213245,
+          "emotion_variance": 0.2381880842390226,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 1.2019770293809309,
+          "late_night_ratio": 0.27792268255432245,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.5362329768547066,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T12:37:17.176698",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 5.308983029683446e-06,
+          "emotion_variance": 0.15992702085847338,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T12:42:18.430560",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5394140074713856,
+          "emotion_variance": 0.052529986345495425,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T12:48:21.591737",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.6466111673851113,
+          "emotion_variance": 0.06691654497617402,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T12:56:25.836382",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.05785208461489874,
+          "emotion_variance": 0.13819786913633764,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T13:02:32.788113",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.995130314989621,
+          "emotion_variance": 0.15799461801130582,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T13:16:53.662361",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.9368585750345891,
+          "emotion_variance": 0.13266381327403207,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T13:27:04.820165",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.1251468664659409,
+          "emotion_variance": 0.10568885235689532,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T16:46:22.505301",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.6787772076466193,
+          "emotion_variance": 0.06854384258976506,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T16:51:22.950289",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.25880114927014486,
+          "emotion_variance": 0.04503199039701038,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T16:56:23.393280",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.3787317451131728,
+          "emotion_variance": 0.06257770511121229,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T17:01:24.544324",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.048567708434548745,
+          "emotion_variance": 0.14150221920783784,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T17:06:25.221992",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.8313744474747723,
+          "emotion_variance": 0.04320041302536577,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T17:11:26.152125",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.12407582968324103,
+          "emotion_variance": 0.11488151472773071,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T17:16:26.934038",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.03740018884960883,
+          "emotion_variance": 0.1136300938194819,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T17:25:31.462344",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.02526891034788544,
+          "emotion_variance": 0.14208663517642997,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-05-31T23:43:22.222860",
+      "risk_score": 0.3812528363186955,
+      "risk_level": "low",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5717084668689638,
+          "emotion_variance": 0.2808801371966368,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 1.6125180945912005,
+          "late_night_ratio": 0.22411164299199562,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.3421930171624627,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T01:08:06.057625",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.24272769214226073,
+          "emotion_variance": 0.07662932885722909,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T12:28:23.185530",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.6540992199702998,
+          "emotion_variance": 0.061211028950345824,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T12:33:23.513738",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.0036820002053316436,
+          "emotion_variance": 0.15852401819002326,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T12:38:23.947923",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.4995045470311499,
+          "emotion_variance": 0.03385164029944544,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T12:43:24.743236",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.14632660722193988,
+          "emotion_variance": 0.018180355611133178,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T12:53:12.630707",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.08834272800729794,
+          "emotion_variance": 0.05826352642942716,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T12:58:13.657797",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.09416813483776537,
+          "emotion_variance": 0.10375530844284361,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T13:22:17.916536",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.7805534533715202,
+          "emotion_variance": 0.07361346384530375,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T13:31:22.104313",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.18329058814330634,
+          "emotion_variance": 0.09696294363601092,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T17:01:04.147068",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.0029801599754441265,
+          "emotion_variance": 0.15429546906313504,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-01T23:43:22.222860",
+      "risk_score": 0.7668478141820214,
+      "risk_level": "high",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5374752595202579,
+          "emotion_variance": 0.12399154029165381,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 3.3681677440794773,
+          "late_night_ratio": 0.2883278128102009,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.5015412707685438,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-02T15:10:08.850886",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.2168411228145462,
+          "emotion_variance": 0.0896271899640513,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-02T17:01:56.579164",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.0006085719297369376,
+          "emotion_variance": 0.15602940032853657,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-02T17:07:01.239671",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.8803049996619793,
+          "emotion_variance": 0.11739968864362302,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-02T17:12:01.631624",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.9999940470626403,
+          "emotion_variance": 0.15999726197989222,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-02T17:17:03.064945",
+      "risk_score": 0.0,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.0841666271935565,
+          "emotion_variance": 0.08263974398731895,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-02T23:43:22.222860",
+      "risk_score": 0.42957555160553706,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5455970703013489,
+          "emotion_variance": 0.29413121182476476,
+          "num_records": 100
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 3.84898514310896,
+          "late_night_ratio": 0.25790087706671294,
+          "num_sessions": 20
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.4284751696372838,
+          "total_interactions": 50
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-03T16:37:11.993547",
+      "risk_score": 0.42957555160553706,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.0015287139115038766,
+          "emotion_variance": 0.15920685767467463,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-03T18:33:30.723484",
+      "risk_score": 0.42957555160553706,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.19039444894949314,
+          "emotion_variance": 0.09238847245363675,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-03T19:11:56.207676",
+      "risk_score": 0.42957555160553706,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.001306698029526919,
+          "emotion_variance": 0.12266966974129381,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-05T23:03:17.653525",
+      "risk_score": 0.2727272727272727,
+      "risk_level": "low",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.5990363880681977,
+          "emotion_variance": 0.11660744194629546,
+          "num_records": 40
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 0.16156239305555553,
+          "late_night_ratio": 0.25,
+          "num_sessions": 40
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.6136363636363636,
+          "total_interactions": 44
         }
       }
     }

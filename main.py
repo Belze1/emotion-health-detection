@@ -30,8 +30,9 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-secret-key')
 app.config['JSON_SORT_KEYS'] = False
 
-# Initialize components
+
 def init_components():
+    """Initialize all application components."""
     global face_detector, emotion_analyzer, depression_predictor, video_recommender
     
     try:
@@ -70,12 +71,13 @@ global_cap = None  # Shared webcam instance
 cap_lock = threading.Lock()
 frame_lock = threading.Lock()
 current_emotions = None
+last_emotions_display = None  # Store last detected emotions for continuous display
 last_risk_check = datetime.now()
 last_socket_update = 0
 risk_check_interval = int(os.getenv('RISK_CHECK_INTERVAL', 300))
 socket_update_interval = float(os.getenv('SOCKET_UPDATE_INTERVAL', 1.0))
 
-# Cấu hình SocketIO với async mode là threading và disable debug logs
+# Cấu hình SocketIO
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*", 
@@ -83,6 +85,143 @@ socketio = SocketIO(
     logger=False,
     engineio_logger=False
 )
+
+def process_frame():
+    """Process a single frame from webcam."""
+    global current_emotions, last_risk_check, last_socket_update, last_emotions_display
+    
+    try:
+        cap = get_webcam()
+        if cap is None:
+            return None
+            
+        ret, frame = cap.read()
+        if not ret or frame is None:
+            return None
+            
+        frame = resize_frame(frame)
+        frame_with_faces, face_boxes = face_detector.detect_faces(frame)
+        
+        if face_boxes:
+            largest_face = max(face_boxes, key=lambda box: box[2] * box[3])
+            face_image = face_detector.extract_face(frame, largest_face)
+            
+            if face_image is not None:
+                result = emotion_analyzer.analyze_emotion(face_image)
+                
+                if result:
+                    current_emotions = result['emotions']
+                    
+                    # Sắp xếp cảm xúc theo tỷ lệ giảm dần
+                    try:
+                        sorted_emotions = sorted(
+                            current_emotions.items(), 
+                            key=lambda x: x[1], 
+                            reverse=True
+                        )
+                        
+                        # Lấy 2 cảm xúc cao nhất và lưu lại
+                        last_emotions_display = sorted_emotions[:2]
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing emotions: {str(e)}")
+                    
+                    # Throttle socket updates
+                    current_time = time.time()
+                    if current_time - last_socket_update >= socket_update_interval:
+                        try:
+                            socketio.emit('emotion_update', {
+                                'timestamp': datetime.now().strftime('%H:%M:%S'),
+                                'emotions': current_emotions
+                            })
+                            last_socket_update = current_time
+                        except Exception as e:
+                            logger.error(f"Error emitting emotion update: {e}")
+                    
+                    # Check depression risk periodically
+                    current_time = datetime.now()
+                    if (current_time - last_risk_check).total_seconds() >= risk_check_interval:
+                        risk_score, risk_level = depression_predictor.predict_risk(
+                            emotion_analyzer.emotion_history,
+                            video_recommender.preferences if video_recommender else None
+                        )
+                        
+                        if risk_level != 'low' and video_recommender:
+                            recommendations = video_recommender.get_video_recommendations(
+                                current_emotions,
+                                exclude_videos=[]
+                            )
+                            try:
+                                socketio.emit('recommendations', {
+                                    'videos': recommendations,
+                                    'risk_score': float(risk_score)
+                                })
+                            except Exception as e:
+                                logger.error(f"Error emitting recommendations: {e}")
+                            
+                        last_risk_check = current_time
+                        save_session_data({
+                            'timestamp': current_time.isoformat(),
+                            'emotions': current_emotions,
+                            'risk_score': float(risk_score),
+                            'risk_level': risk_level
+                        })
+        
+        # Always draw emotions if we have them, regardless of current face detection
+        if last_emotions_display and len(face_boxes) > 0:
+            x, y, w, h = face_boxes[0]  # Use first detected face for text position
+            text_x = x + w + 10
+            
+            # Hiển thị từng cảm xúc và tỷ lệ
+            for i, (emotion, ratio) in enumerate(last_emotions_display):
+                text_y = y + 30 * (i + 1)
+                emotion_text = f"{emotion}: {int(ratio * 100)}%"
+                
+                if i == 0:  # Cảm xúc cao nhất
+                    draw_text(frame_with_faces, emotion_text, (text_x, text_y),
+                            font_scale=0.7, thickness=2,
+                            text_color=(255, 255, 255), bg_color=(0, 128, 0))
+                else:  # Cảm xúc thứ hai
+                    draw_text(frame_with_faces, emotion_text, (text_x, text_y),
+                            font_scale=0.6, thickness=2,
+                            text_color=(255, 255, 255), bg_color=(128, 0, 0))
+                    
+        return frame_with_faces
+        
+    except Exception as e:
+        logger.error(f"Error processing frame: {str(e)}")
+        return None
+
+def generate_frames():
+    """Generate video frames."""
+    while True:
+        with frame_lock:
+            frame = process_frame()
+            
+        if frame is not None:
+            ret, buffer = cv2.imencode('.jpg', frame)
+            if ret:
+                yield (
+                    b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
+                )
+                
+        time.sleep(0.033)  # ~30 FPS
+
+def get_webcam():
+    """Get or initialize global webcam instance."""
+    global global_cap
+    
+    with cap_lock:
+        if global_cap is None or not global_cap.isOpened():
+            logger.info("Initializing webcam...")
+            global_cap = init_webcam()
+            
+            if global_cap is None or not global_cap.isOpened():
+                logger.error("Could not connect to webcam")
+                return None
+                
+        return global_cap
 
 @app.route('/')
 def index():
@@ -114,35 +253,6 @@ def video_feed():
         generate_frames(),
         mimetype='multipart/x-mixed-replace; boundary=frame'
     )
-
-@app.route('/api/recommendations', methods=['POST'])
-def get_recommendations():
-    """API endpoint for video recommendations."""
-    try:
-        if not request.is_json:
-            return make_response(jsonify({'error': 'Content-Type must be application/json'}), 400)
-
-        if not video_recommender:
-            return make_response(jsonify({'error': 'Video recommendations are not available'}), 503)
-            
-        data = request.get_json()
-        emotion_data = data.get('emotion_data')
-        exclude_videos = data.get('exclude_videos', [])
-
-        if not emotion_data:
-            return make_response(jsonify({'error': 'Missing emotion_data'}), 400)
-
-        recommendations = video_recommender.get_video_recommendations(
-            emotion_data,
-            exclude_videos=exclude_videos,
-            num_recommendations=8
-        )
-
-        return jsonify({'recommendations': recommendations})
-
-    except Exception as e:
-        logger.error(f"Error getting recommendations: {str(e)}")
-        return make_response(jsonify({'error': 'Internal server error'}), 500)
 
 @app.route('/api/mental-health-check', methods=['POST'])
 def mental_health_check():
@@ -252,110 +362,64 @@ def get_history_data():
         logger.error(f"Error getting history data: {str(e)}")
         return make_response(jsonify({'error': 'Internal server error'}), 500)
 
-def generate_frames():
-    """Generate video frames."""
-    while True:
-        with frame_lock:
-            frame = process_frame()
-            
-        if frame is not None:
-            ret, buffer = cv2.imencode('.jpg', frame)
-            if ret:
-                yield (
-                    b'--frame\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
-                )
-                
-        time.sleep(0.033)  # ~30 FPS
-
-def process_frame():
-    """Process a single frame from webcam."""
-    global current_emotions, last_risk_check, last_socket_update
-    
+@app.route('/api/recommendations', methods=['POST'])
+def get_recommendations():
+    """API endpoint for video recommendations."""
     try:
-        cap = get_webcam()
-        if cap is None:
-            return None
-            
-        ret, frame = cap.read()
-        if not ret or frame is None:
-            return None
-            
-        frame = resize_frame(frame)
-        
-        frame_with_faces, face_boxes = face_detector.detect_faces(frame)
-        
-        if face_boxes:
-            largest_face = max(face_boxes, key=lambda box: box[2] * box[3])
-            face_image = face_detector.extract_face(frame, largest_face)
-            
-            if face_image is not None:
-                result = emotion_analyzer.analyze_emotion(face_image)
-                
-                if result:
-                    current_emotions = result['emotions']
-                    
-                    # Throttle socket updates
-                    current_time = time.time()
-                    if current_time - last_socket_update >= socket_update_interval:
-                        try:
-                            socketio.emit('emotion_update', {
-                                'timestamp': datetime.now().strftime('%H:%M:%S'),
-                                'emotions': current_emotions
-                            })
-                            last_socket_update = current_time
-                        except Exception as e:
-                            logger.error(f"Error emitting emotion update: {e}")
-                    
-                    # Check depression risk periodically
-                    current_time = datetime.now()
-                    if (current_time - last_risk_check).total_seconds() >= risk_check_interval:
-                        risk_score, risk_level = depression_predictor.predict_risk(
-                            emotion_analyzer.emotion_history,
-                            video_recommender.preferences if video_recommender else None
-                        )
-                        
-                        if risk_level != 'low' and video_recommender:
-                            recommendations = video_recommender.get_video_recommendations(
-                                current_emotions,
-                                exclude_videos=[]
-                            )
-                            try:
-                                socketio.emit('recommendations', {
-                                    'videos': recommendations,
-                                    'risk_score': float(risk_score)
-                                })
-                            except Exception as e:
-                                logger.error(f"Error emitting recommendations: {e}")
-                            
-                        last_risk_check = current_time
-                        save_session_data({
-                            'timestamp': current_time.isoformat(),
-                            'emotions': current_emotions,
-                            'risk_score': float(risk_score),
-                            'risk_level': risk_level
-                        })
-                    
-        return frame_with_faces
-        
-    except Exception as e:
-        logger.error(f"Error processing frame: {str(e)}")
-        return None
+        if not request.is_json:
+            return make_response(jsonify({'error': 'Content-Type must be application/json'}), 400)
 
-def get_webcam():
-    """Get or initialize global webcam instance."""
-    global global_cap
-    
-    with cap_lock:
-        if global_cap is None or not global_cap.isOpened():
-            logger.info("Initializing webcam...")
-            global_cap = init_webcam()
+        if not video_recommender:
+            return make_response(jsonify({'error': 'Video recommendations are not available'}), 503)
             
-            if global_cap is None or not global_cap.isOpened():
-                logger.error("Could not connect to webcam")
-                return None
-                
-        return global_cap
+        data = request.get_json()
+        emotion_data = data.get('emotion_data')
+        exclude_videos = data.get('exclude_videos', [])
+
+        if not emotion_data:
+            return make_response(jsonify({'error': 'Missing emotion_data'}), 400)
+
+        recommendations = video_recommender.get_video_recommendations(
+            emotion_data,
+            exclude_videos=exclude_videos,
+            num_recommendations=8
+        )
+
+        return jsonify({'recommendations': recommendations})
+
+    except Exception as e:
+        logger.error(f"Error getting recommendations: {str(e)}")
+        return make_response(jsonify({'error': 'Internal server error'}), 500)
+
+@app.route('/api/feedback', methods=['POST'])
+def handle_feedback():
+    """API endpoint for handling video feedback."""
+    try:
+        if not request.is_json:
+            return make_response(jsonify({'error': 'Content-Type must be application/json'}), 400)
+
+        if not video_recommender:
+            return make_response(jsonify({'error': 'Video recommendations are not available'}), 503)
+            
+        data = request.get_json()
+        video_id = data.get('video_id')
+        feedback_type = data.get('feedback_type')
+        emotion_data = data.get('emotion_data')
+
+        if not all([video_id, feedback_type, emotion_data]):
+            return make_response(jsonify({'error': 'Missing required data'}), 400)
+
+        if feedback_type not in ['like', 'dislike']:
+            return make_response(jsonify({'error': 'Invalid feedback type'}), 400)
+
+        # Update video preferences
+        video_recommender.update_model(video_id, 'like' if feedback_type == 'like' else 'dislike')
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.error(f"Error handling feedback: {str(e)}")
+        return make_response(jsonify({'error': 'Internal server error'}), 500)
 
 @socketio.on('connect')
 def handle_connect():

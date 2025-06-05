@@ -314,3 +314,14 @@
     background-color: #f5f5f5;
     color: #424242;
 }
+
+.feedback-message {
+    text-align: center;
+    padding: 8px;
+    color: #28a745;
+    border: 1px solid #28a745;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+    margin: 8px 0;
+    animation: fadeIn 0.3s ease;
+}
