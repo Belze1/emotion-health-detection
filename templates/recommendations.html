@@ -59,77 +59,18 @@
             }
         }
 
-        // Thêm style cho cảnh báo
-        const warningStyle = `
-            <style>
-                .warning-message {
-                    position: fixed;
-                    top: 20px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    background-color: #ff4444;
-                    color: white;
-                    padding: 15px 30px;
-                    border-radius: 5px;
-                    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-                    z-index: 1000;
-                    display: none;
-                    animation: slideIn 0.5s ease-out;
-                }
-
-                @keyframes slideIn {
-                    from { top: -100px; }
-                    to { top: 20px; }
-                }
-            </style>
-        `;
-        document.head.insertAdjacentHTML('beforeend', warningStyle);
-
-        // Thêm div cho cảnh báo
-        const warningDiv = document.createElement('div');
-        warningDiv.className = 'warning-message';
-        warningDiv.id = 'warningMessage';
-        warningDiv.innerHTML = 'Cảnh báo: Bạn đang có cảm xúc tiêu cực kéo dài!';
-        document.body.appendChild(warningDiv);
-
         const EmotionState = {
             current: {
                 data: null,
                 timestamp: null,
                 display: null,
-                negativeStartTime: null,
-                warningShown: false,
-                
                 init: function() {
                     this.display = document.getElementById('emotionDisplay');
-                },
-
-                checkNegativeEmotions: function() {
-                    if (!this.data) return false;
-                    
-                    const negativeThreshold = 0.5; // Ngưỡng cảm xúc tiêu cực
-                    const isNegative = (this.data.sad || 0) + (this.data.angry || 0) > negativeThreshold;
-                    
-                    const now = new Date().getTime();
-                    
-                    if (isNegative) {
-                        if (!this.negativeStartTime) {
-                            this.negativeStartTime = now;
-                        } else if (now - this.negativeStartTime > 20000 && !this.warningShown) { // 20 seconds
-                            document.getElementById('warningMessage').style.display = 'block';
-                            this.warningShown = true;
-                        }
-                    } else {
-                        this.negativeStartTime = null;
-                        this.warningShown = false;
-                        document.getElementById('warningMessage').style.display = 'none';
-                    }
                 },
                 update: function(emotions) {
                     this.data = emotions;
                     this.timestamp = new Date().getTime();
                     this.render();
-                    this.checkNegativeEmotions();
                     debugLog('Current emotion updated:', this.data);
                 },
                 render: function() {

@@ -1,5 +1,5 @@
 {
-  "last_assessment": "2025-06-05T23:03:17.653525",
+  "last_assessment": "2025-06-08T23:34:02.142171",
   "assessments": [
     {
       "timestamp": "2025-05-27T23:43:22.222860",
@@ -582,6 +582,63 @@
           "max_continuous_usage": 0.16156239305555553,
           "late_night_ratio": 0.25,
           "num_sessions": 40
+        },
+        "interaction_patterns": {
+          "dislike_ratio": 0.6136363636363636,
+          "total_interactions": 44
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-06T00:30:12.015114",
+      "risk_score": 0.2727272727272727,
+      "risk_level": "low",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.9999462735718889,
+          "emotion_variance": 0.11349032711665208,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-06T00:35:13.321242",
+      "risk_score": 0.2727272727272727,
+      "risk_level": "low",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.9774942090135369,
+          "emotion_variance": 0.1510977256688506,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-06T00:40:14.002314",
+      "risk_score": 0.2727272727272727,
+      "risk_level": "low",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.6073361860014409,
+          "emotion_variance": 0.05703972337250973,
+          "num_records": 1
+        }
+      }
+    },
+    {
+      "timestamp": "2025-06-08T23:34:02.142171",
+      "risk_score": 0.45454545454545453,
+      "risk_level": "medium",
+      "metrics": {
+        "emotion_patterns": {
+          "negative_ratio": 0.3469114720677482,
+          "emotion_variance": 0.09431065084222236,
+          "num_records": 3
+        },
+        "usage_patterns": {
+          "max_continuous_usage": 0.8770890536111111,
+          "late_night_ratio": 0.3333333333333333,
+          "num_sessions": 3
         },
         "interaction_patterns": {
           "dislike_ratio": 0.6136363636363636,

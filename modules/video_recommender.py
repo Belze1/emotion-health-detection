@@ -86,8 +86,8 @@ class VideoRecommender:
             self.df = pd.DataFrame()
             
     def create_or_load_embeddings(self):
-        """Tạo hoặc tải embeddings từ cache."""
-        cache_path = os.path.join(self.cache_dir, f"video_embeddings_{self.embedding_model_name}.pkl")
+        """Create or load embeddings with emotion distributions."""
+        cache_path = os.path.join(self.cache_dir, f"video_embeddings_{self.embedding_model_name}_v2.pkl")
         
         if os.path.exists(cache_path):
             try:
@@ -102,7 +102,7 @@ class VideoRecommender:
         self._generate_embeddings(cache_path)
             
     def _generate_embeddings(self, cache_path):
-        """Tạo embeddings cho nội dung video."""
+        """Generate embeddings with emotion distribution for videos."""
         try:
             logging.info("Generating new embeddings...")
             batch_size = 32
@@ -114,12 +114,49 @@ class VideoRecommender:
                 
             logging.info(f"Generating embeddings for {total_videos} videos")
             
+            emotion_words = {
+                'happy': ['happy', 'joy', 'fun', 'laugh', 'exciting', 'positive', 'wonderful'],
+                'sad': ['sad', 'sorrow', 'crying', 'depressing', 'heartbreaking', 'emotional'],
+                'angry': ['angry', 'rage', 'mad', 'frustrating', 'annoying', 'furious'],
+                'surprise': ['surprise', 'shocking', 'amazing', 'incredible', 'unbelievable'],
+                'neutral': ['normal', 'casual', 'regular', 'standard', 'typical', 'ordinary']
+            }
+            
             for i in range(0, total_videos, batch_size):
                 batch_df = self.df.iloc[i:i+batch_size]
                 try:
-                    embeddings = self.model.encode(batch_df['cleaned_content'].tolist())
+                    # Generate content embeddings
+                    content_embeddings = self.model.encode(batch_df['cleaned_content'].tolist())
+                    
                     for j, row in batch_df.iterrows():
-                        self.video_embeddings[row['video_id']] = embeddings[j-i]
+                        content = row['cleaned_content'].lower()
+                        
+                        # Calculate emotion distribution
+                        emotion_counts = {
+                            emotion: sum(content.count(word) for word in words)
+                            for emotion, words in emotion_words.items()
+                        }
+                        
+                        total_emotions = sum(emotion_counts.values()) or 1  # Avoid division by zero
+                        emotion_dist = np.array([
+                            emotion_counts.get(e, 0) / total_emotions
+                            for e in ['happy', 'sad', 'angry', 'surprise', 'neutral']
+                        ])
+                        
+                        # Ensure non-zero distribution
+                        if np.sum(emotion_dist) == 0:
+                            emotion_dist = np.array([0.2, 0.2, 0.2, 0.2, 0.2])
+                        
+                        # Combine emotion distribution with content embedding
+                        content_emb = content_embeddings[j-i]
+                        content_emb = content_emb / np.linalg.norm(content_emb)
+                        
+                        combined_embedding = np.concatenate([
+                            emotion_dist,
+                            content_emb
+                        ])
+                        
+                        self.video_embeddings[row['video_id']] = combined_embedding
                 except Exception as e:
                     logging.error(f"Error generating embeddings for batch {i}: {str(e)}")
                     continue
@@ -141,41 +178,58 @@ class VideoRecommender:
             logging.error(f"Error in _generate_embeddings: {str(e)}")
 
     def encode_emotions(self, emotions):
-        """Chuyển đổi trạng thái cảm xúc thành text description."""
+        """Convert emotion state into vector and description."""
         try:
-            # Kiểm tra emotions hợp lệ
             if not emotions or not isinstance(emotions, dict):
                 raise ValueError("Invalid emotions data")
 
-            # Sắp xếp cảm xúc theo tỷ lệ giảm dần
-            sorted_emotions = sorted(emotions.items(), key=lambda x: x[1], reverse=True)
+            # Create emotion distribution vector
+            emotion_order = ['happy', 'sad', 'angry', 'surprise', 'neutral']
+            emotion_vector = np.array([emotions.get(e, 0.0) for e in emotion_order])
+            emotion_vector = np.clip(emotion_vector, 0, 1)
             
-            description = ["Content that combines"]
-            emotion_map = {
-                'happy': 'positive and uplifting',
-                'sad': 'motivational and inspiring',
-                'angry': 'calming and peaceful',
-                'surprise': 'amazing and fascinating',
-                'neutral': 'balanced and informative'
-            }
-            
-            significant_emotions = [
-                (emotion, ratio) for emotion, ratio in sorted_emotions 
-                if ratio > 0.1  # Chỉ xét cảm xúc > 10%
-            ]
-            
-            if not significant_emotions:
-                description.append("engaging and entertaining content")
+            # Normalize to create proper distribution
+            total = np.sum(emotion_vector)
+            if total > 0:
+                emotion_vector = emotion_vector / total
             else:
-                for emotion, ratio in significant_emotions:
-                    description.append(f"{emotion_map.get(emotion, 'engaging')} content ({int(ratio*100)}%)")
+                emotion_vector = np.array([0.2, 0.2, 0.2, 0.2, 0.2])
             
-            final_text = " with ".join(description)
-            logging.info(f"Generated description: {final_text}")
+            # Generate descriptive text
+            description_parts = []
+            for emotion, value in zip(emotion_order, emotion_vector):
+                if value >= 0.1:  # Only include emotions with at least 10% presence
+                    percentage = int(value * 100)
+                    if percentage >= 50:
+                        intensity = "predominantly"
+                    elif percentage >= 30:
+                        intensity = "significantly"
+                    elif percentage >= 20:
+                        intensity = "moderately"
+                    else:
+                        intensity = "slightly"
+                    description_parts.append(f"{intensity} {emotion} ({percentage}%)")
             
-            # Encode và normalize
-            embedding = self.model.encode([final_text])[0]
-            return embedding / np.linalg.norm(embedding)
+            description = "The user is " + ", ".join(description_parts[:-1])
+            if len(description_parts) > 1:
+                description += f" and {description_parts[-1]}"
+            elif description_parts:
+                description += description_parts[0]
+            else:
+                description = "The user is in a balanced emotional state"
+            
+            # Get semantic embedding for description
+            semantic_embedding = self.model.encode([description])[0]
+            semantic_embedding = semantic_embedding / np.linalg.norm(semantic_embedding)
+            
+            # Combine distribution with semantic embedding
+            combined = np.concatenate([
+                emotion_vector,    # Original distribution (5 dimensions)
+                semantic_embedding # Semantic understanding
+            ])
+            
+            logging.info(f"Emotion profile: {description}")
+            return combined, description
             
         except Exception as e:
             logging.error(f"Error encoding emotions: {str(e)}")
@@ -202,19 +256,45 @@ class VideoRecommender:
             self.last_emotion_state = emotions
             self.last_recommendation_time = current_time
             
-            # Phase 1: Get top-k candidates based on similarity
-            query_embedding = self.encode_emotions(emotions)
+            # Phase 1: Get top-k candidates based on combined similarity
+            query_embedding, user_description = self.encode_emotions(emotions)
             candidates = []
             
-            # Calculate similarities
+            # Split query embedding into emotion distribution and semantic parts
+            query_emotions = query_embedding[:5]
+            query_semantic = query_embedding[5:]
+            
+            logging.info(f"Finding matches for profile: {user_description}")
+            
+            # Calculate combined similarities
             for video_id, video_embedding in self.video_embeddings.items():
                 if video_id in exclude_set:
                     continue
+                    
                 try:
-                    sim = float(1 - cosine(query_embedding, video_embedding))
-                    if not np.isnan(sim):
-                        candidates.append((video_id, sim))
-                except:
+                    # Split video embedding similarly
+                    video_emotions = video_embedding[:5]
+                    video_semantic = video_embedding[5:]
+                    
+                    # Calculate emotion distribution similarity (Jensen-Shannon divergence)
+                    m = 0.5 * (query_emotions + video_emotions)
+                    js_div = 0.5 * (
+                        np.sum(query_emotions * np.log(query_emotions / (m + 1e-10))) +
+                        np.sum(video_emotions * np.log(video_emotions / (m + 1e-10)))
+                    )
+                    emotion_sim = 1 - (js_div / np.log(2))
+                    
+                    # Calculate semantic similarity
+                    semantic_sim = float(1 - cosine(query_semantic, video_semantic))
+                    
+                    # Combined similarity score with higher weight on emotion distribution
+                    total_score = 0.7 * emotion_sim + 0.3 * semantic_sim
+                    
+                    if not np.isnan(total_score):
+                        candidates.append((video_id, total_score))
+                        
+                except Exception as e:
+                    logging.debug(f"Error calculating similarity for video {video_id}: {str(e)}")
                     continue
                     
             if not candidates:
